@@ -2,6 +2,7 @@ name: yolov10-deepsort
 
 dependencies:
   - python==3.11
+  - huggingface_hub
   
   - pip:
     - torch
