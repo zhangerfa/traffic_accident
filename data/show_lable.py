@@ -9,7 +9,7 @@ xml_path = rf'{path}\Annotations\train\{data}.xml'
 im = cv2.imread(im_path)
 
 # 将xml格式转化为yolo_txt格式
-res = cibver_yolo_txt(xml_path, ['car'])
+res = cibver_yolo_txt(xml_path, ['car'], False)
 # 将标注框画在图片上
 for line in res.split('\n'):
     if line:
