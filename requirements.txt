@@ -1,4 +1,4 @@
 torch
 absl-py
-git+https://github.com/THU-MIG/yolov10.git
+git+https://github.com/ultralytics/ultralytics.git
 deep-sort-realtime

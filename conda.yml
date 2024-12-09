@@ -1,4 +1,4 @@
-name: yolov10-deepsort
+name: yolov11
 
 dependencies:
   - python==3.11
@@ -7,5 +7,5 @@ dependencies:
   - pip:
     - torch
     - absl-py
-    - git+https://github.com/THU-MIG/yolov10.git
+    - git+https://github.com/ultralytics/ultralytics.git
     - deep-sort-realtime
