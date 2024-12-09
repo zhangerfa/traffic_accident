@@ -4,6 +4,21 @@ import xml.etree.ElementTree as ET
 import os
 import glob
 
+# 坐标归一化：yolo中的坐标是相对于图像宽度和高度的，范围是[0, 1]
+def normalize_coordinates(x, y, w, h, image_width, image_height):
+    # 将坐标和尺寸转换为浮点型
+    x = float(x)
+    y = float(y)
+    w = float(w)
+    h = float(h)
+    # 归一化坐标，除以图像宽度和高度
+    x_normalized = max(x / image_width, 0)
+    y_normalized = max(y / image_height, 0)
+    w_normalized = max(w / image_width, 0)
+    h_normalized = max(h / image_height, 0)
+    # 返回归一化后的坐标元组
+    return x_normalized, y_normalized, w_normalized, h_normalized
+
 # 读入xml文件提取标准信息并保存为yolo_txt格式
 # in_path: Annotation文件所在路径
 # out_path: yolo_txt文件存储位置，一般命名为 labels
@@ -48,6 +63,8 @@ def convert_annotation(in_path, out_path, set_txt_path, classes):
                 cx = w
             if cy > h:
                 cy = h
+            # 归一化坐标
+            cx, cy, cw, ch = normalize_coordinates(cx, cy, cw, ch, w, h)
             bb = [cx, cy, cw, ch, angle]
             # 写入yolo_txt文件
             out_file.write(str(cls_id) + " " + " ".join([str(a) for a in bb]) + '\n')
