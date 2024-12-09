@@ -1,23 +1,103 @@
 # -*- coding: utf-8 -*-
-import math
 import xml.etree.ElementTree as ET
 import os
 import glob
 
+import numpy as np
+
+
+def rotate_point(x, y, cx, cy, angle_rad):
+    """
+    旋转点 (x, y) 关于中心点 (cx, cy) 旋转角度 angle_rad
+    """
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+
+    # 旋转矩阵应用
+    x_rot = cos_angle * (x - cx) - sin_angle * (y - cy) + cx
+    y_rot = sin_angle * (x - cx) + cos_angle * (y - cy) + cy
+
+    return x_rot, y_rot
+
+
+def convert_to_bbox(cx, cy, w, h, angle):
+    """
+    将矩形的中心 (cx, cy)、宽度 w、高度 h 和角度 angle 转换为四个角点坐标。
+    角度 angle 单位为弧度
+    """
+
+    # 计算矩形四个角点的相对位置（相对于中心点）
+    half_w = w / 2
+    half_h = h / 2
+
+    # 定义矩形的四个角点（相对于中心）
+    corners = [
+        (-half_w, -half_h),  # 左上角
+        (half_w, -half_h),  # 右上角
+        (half_w, half_h),  # 右下角
+        (-half_w, half_h)  # 左下角
+    ]
+
+    # 对四个角点进行旋转
+    rotated_corners = []
+    for corner in corners:
+        x, y = corner
+        rotated_x, rotated_y = rotate_point(x, y, cx, cy, angle)
+        rotated_corners.append((rotated_x, rotated_y))
+
+    # 返回四个角点的坐标（x1, y1, x2, y2, x3, y3, x4, y4）
+    return rotated_corners[0][0], rotated_corners[0][1], \
+        rotated_corners[1][0], rotated_corners[1][1], \
+        rotated_corners[2][0], rotated_corners[2][1], \
+        rotated_corners[3][0], rotated_corners[3][1]
+
 # 坐标归一化：yolo中的坐标是相对于图像宽度和高度的，范围是[0, 1]
-def normalize_coordinates(x, y, w, h, image_width, image_height):
-    # 将坐标和尺寸转换为浮点型
-    x = float(x)
-    y = float(y)
-    w = float(w)
-    h = float(h)
+def normalize_coordinates(bbox, image_width, image_height):
     # 归一化坐标，除以图像宽度和高度
-    x_normalized = max(x / image_width, 0)
-    y_normalized = max(y / image_height, 0)
-    w_normalized = max(w / image_width, 0)
-    h_normalized = max(h / image_height, 0)
-    # 返回归一化后的坐标元组
-    return x_normalized, y_normalized, w_normalized, h_normalized
+    normalized_bbox = []
+    for i in range(8):
+        normalized_bbox.append(bbox[i] / image_width if i % 2 == 0 else bbox[i] / image_height)
+    return normalized_bbox
+
+def cibver_yolo_txt(xml_path, classes):
+    # 读入xml文件
+    in_file = open(xml_path, encoding='UTF-8')
+    # 信息提取
+    tree = ET.parse(in_file)
+    root = tree.getroot()
+    size = root.find('size')
+    w = int(size.find('width').text)
+    h = int(size.find('height').text)
+
+    res = ""
+    for obj in root.iter('object'):
+        difficult = obj.find('difficult').text
+        cls = obj.find('name').text
+        if cls not in classes or int(difficult) == 1:
+            continue
+        cls_id = classes.index(cls)
+        xmlbox = obj.find('robndbox')
+        cx = float(xmlbox.find('cx').text)
+        cy = float(xmlbox.find('cy').text)
+        cw = float(xmlbox.find('w').text)
+        ch = float(xmlbox.find('h').text)
+        angle = float(xmlbox.find('angle').text)
+        # 标注越界修正
+        if cw > w:
+            cw = w
+        if ch > h:
+            ch = h
+        if cx > w:
+            cx = w
+        if cy > h:
+            cy = h
+        # 将cx, cy, w, h, angle转换为x1, y1, x2, y2, x3, y3, x4, y4
+        bbox = convert_to_bbox(cx, cy, cw, ch, angle)
+        # 归一化坐标
+        # bbox = normalize_coordinates(bbox, w, h)
+        # 一行转换为yolo_txt格式
+        res += str(cls_id) + " " + " ".join([str(a) for a in bbox]) + '\n'
+    return res
 
 # 读入xml文件提取标准信息并保存为yolo_txt格式
 # in_path: Annotation文件所在路径
@@ -31,43 +111,11 @@ def convert_annotation(in_path, out_path, set_txt_path, classes):
     # 遍历所有xml文件，提取信息存储为yolo_txt文件
     img_ids = open(set_txt_path).read().strip().split()
     for img_id in img_ids:
-        # 读入xml文件
-        in_file = open(in_path + f'/{img_id}.xml', encoding='UTF-8')
         # 创建yolo_txt文件
         out_file = open(out_path + f'/{img_id}.txt', 'w')
-        # 信息提取
-        tree = ET.parse(in_file)
-        root = tree.getroot()
-        size = root.find('size')
-        w = int(size.find('width').text)
-        h = int(size.find('height').text)
-        for obj in root.iter('object'):
-            difficult = obj.find('difficult').text
-            cls = obj.find('name').text
-            if cls not in classes or int(difficult) == 1:
-                continue
-            cls_id = classes.index(cls)
-            xmlbox = obj.find('robndbox')
-            cx = float(xmlbox.find('cx').text)
-            cy = float(xmlbox.find('cy').text)
-            cw = float(xmlbox.find('w').text)
-            ch = float(xmlbox.find('h').text)
-            # 弧度转换为角度
-            angle = float(xmlbox.find('angle').text) * 180 / math.pi
-            # 标注越界修正
-            if cw > w:
-                cw = w
-            if ch > h:
-                ch = h
-            if cx > w:
-                cx = w
-            if cy > h:
-                cy = h
-            # 归一化坐标
-            cx, cy, cw, ch = normalize_coordinates(cx, cy, cw, ch, w, h)
-            bb = [cx, cy, cw, ch, angle]
-            # 写入yolo_txt文件
-            out_file.write(str(cls_id) + " " + " ".join([str(a) for a in bb]) + '\n')
+        # 转换为yolo_txt格式
+        res = cibver_yolo_txt(in_path + f'/{img_id}.xml', classes)
+        out_file.write(res)
 
 
 # 获取数据集所有图片名的txt文件
