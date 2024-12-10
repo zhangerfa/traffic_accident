@@ -11,7 +11,17 @@ def gene_colors(classes):
     return [list(map(int, color)) for color in colors]
 
 
-def show_bboxes(im, obbs, cls_ls, classes, thickness=2):
+def drwa_bboxes_by_xyxy(im, xyxys, cls_ls, classes, thickness=2):
+    for i in range(len(xyxys)):
+        xyxy = xyxys[i]
+        cls_id = int(cls_ls[i])
+        color = colors[cls_id]
+        x1, y1, x2, y2 = xyxy
+        cv2.rectangle(im, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
+        cv2.putText(im, classes[cls_id], (int(x1), int(y1)), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness)
+
+
+def draw_bboxes_by_obb(im, obbs, cls_ls, classes, thickness=2):
     for i in range(len(obbs)):
         obb = obbs[i]
         cls_id = int(cls_ls[i])
@@ -28,28 +38,42 @@ def show_bboxes(im, obbs, cls_ls, classes, thickness=2):
         # 显示分类
         cv2.putText(im, classes[cls_id], (int(x1), int(y1)), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness)
 
-
-    # 长、宽等比例缩小到原来的0.5倍
-    im = cv2.resize(im, (0, 0), fx=0.5, fy=0.5)
-    cv2.imshow("output", im)
+# 根据obb或者xyxy的结果画出结果
+def __draw_results(im, results):
+    names = results.names
+    # 判断是否是obb
+    if results.obb:
+        is_obb = True
+    else:
+        is_obb = False
+    if is_obb:
+        obbs = results.obb.xyxyxyxy.tolist()
+        cls_ids = results.obb.cls.tolist()
+        draw_bboxes_by_obb(im, obbs, cls_ids, names)
+    else:
+        boxes = results.boxes
+        xyxys = boxes.xyxy.tolist()
+        cls_ids = boxes.cls.tolist()
+        drwa_bboxes_by_xyxy(im, xyxys, cls_ids, names)
 
 
 def predict_img(model_path, img_path):
     model = YOLO(model_path)
     im = cv2.imread(img_path)
     results = model.predict(im)[0]
-    # 预测旋转框
-    obbs = results.obb.xyxyxyxy.tolist()
     # 分类映射和分类预测list
     names = results.names
     global colors
     colors = gene_colors(names)
-    cls_ids = results.obb.cls.tolist()
-    show_bboxes(im, obbs, cls_ids, names)
+    __draw_results(im, results)
+
+    # 长、宽等比例缩小到原来的0.5倍
+    im = cv2.resize(im, (0, 0), fx=0.5, fy=0.5)
+    cv2.imshow("output", im)
     cv2.waitKey(0)
 
 
-def predict_video(model_path, video_path):
+def predict_video(model_path, video_path, is_obb=True):
     model = YOLO(model_path)
     cap = cv2.VideoCapture(video_path)
     ret, im = cap.read()
@@ -62,14 +86,10 @@ def predict_video(model_path, video_path):
         if not ret:
             break
         results = model.predict(im)[0]
-        obbs = results.obb.xyxyxyxy.tolist()
-        names = results.names
-        cls_ids = results.obb.cls.tolist()
-        show_bboxes(im, obbs, cls_ids, names)
-        # 按esc退出
-        if cv2.waitKey(1) == 27:
-            cv2.destroyAllWindows()
-            break
-        else:
-            cv2.waitKey(0)
+        __draw_results(im, results)
+
+        # 长、宽等比例缩小到原来的0.5倍
+        im = cv2.resize(im, (0, 0), fx=0.5, fy=0.5)
+        cv2.imshow("output", im)
+        cv2.waitKey(0)
     cap.release()
