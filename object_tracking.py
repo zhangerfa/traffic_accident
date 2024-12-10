@@ -7,15 +7,22 @@ import logging
 from collections import defaultdict
 from absl import app, flags
 from deep_sort_realtime.deepsort_tracker import DeepSort
-from ultralytics import YOLOv10
+from ultralytics import YOLO
+
+import os
+# 允许多版本 OpenMP 共存
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # Define command line flags
 flags.DEFINE_string("video", "./data/test_1.mp4", "Path to input video or webcam index (0)")
 flags.DEFINE_string("output", "./output/output.mp4", "Path to output video")
+flags.DEFINE_string("model_path", "./weights/yolo11x-obb.pt", "Path to model")
 flags.DEFINE_float("conf", 0.50, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
 flags.DEFINE_integer("class_id", None, "Class ID to track")
@@ -35,13 +42,12 @@ def initialize_video_capture(video_input):
     
     return cap
 
-def initialize_model():
-    model_path = "./weights/yolov10x.pt"
+def initialize_model(model_path):
     if not os.path.exists(model_path):
         logger.error(f"Model weights not found at {model_path}")
         raise FileNotFoundError("Model weights file not found")
     
-    model = YOLOv10(model_path)
+    model = YOLO(model_path)
     
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -54,29 +60,24 @@ def initialize_model():
     logger.info(f"Using {device} as processing device")
     return model
 
-def load_class_names():
-    classes_path = "./configs/coco.names"
-    if not os.path.exists(classes_path):
-        logger.error(f"Class names file not found at {classes_path}")
-        raise FileNotFoundError("Class names file not found")
-    
-    with open(classes_path, "r") as f:
-        class_names = f.read().strip().split("\n")
-    return class_names
-
-def process_frame(frame, model, tracker, class_names, colors):
+def process_frame(frame, model, tracker, conf, class_id):
     results = model(frame, verbose=False)[0]
+    # 预测旋转框
+    bboxes = results.obb.xyxy.tolist()
+    # 分类映射和分类预测list
+    names = results.names
+    cls_ls = results.obb.cls.tolist()
+    conf_ls = results.obb.conf.tolist()
     detections = []
-    for det in results.boxes:
-        label, confidence, bbox = det.cls, det.conf, det.xyxy[0]
+    for i in range(len(bboxes)):
+        class_id, confidence, bbox = int(cls_ls[i]), conf_ls[i], bboxes[i]
         x1, y1, x2, y2 = map(int, bbox)
-        class_id = int(label)
         
-        if FLAGS.class_id is None:
-            if confidence < FLAGS.conf:
+        if class_id is None:
+            if confidence < conf:
                 continue
         else:
-            if class_id != FLAGS.class_id or confidence < FLAGS.conf:
+            if class_id != class_id or confidence < conf:
                 continue
         
         detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, class_id])
@@ -84,7 +85,7 @@ def process_frame(frame, model, tracker, class_names, colors):
     tracks = tracker.update_tracks(detections, frame=frame)
     return tracks
 
-def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping):
+def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping, blur_id):
     for track in tracks:
         if not track.is_confirmed():
             continue
@@ -107,65 +108,79 @@ def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_
         cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), (B, G, R), -1)
         cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
-        if FLAGS.blur_id is not None and class_id == FLAGS.blur_id:
+        if blur_id is not None and class_id == blur_id:
             if 0 <= x1 < x2 <= frame.shape[1] and 0 <= y1 < y2 <= frame.shape[0]:
                 frame[y1:y2, x1:x2] = cv2.GaussianBlur(frame[y1:y2, x1:x2], (99, 99), 3)
     
     return frame
 
-def main(_argv):
+
+def predict_and_track_video(model_path, video_path, output=None, conf=0.5, bluf_id=None, class_id=None):
     try:
-        cap = initialize_video_capture(FLAGS.video)
-        model = initialize_model()
-        class_names = load_class_names()
-        
+        cap = initialize_video_capture(video_path)
+        model = initialize_model(model_path)
+        # 先预测一帧拿到类别名列表
+        ret, frame = cap.read()
+        if ret:
+            class_names = model.predict(frame)[0].names
+        else:
+            class_names = []
+
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(cap.get(cv2.CAP_PROP_FPS))
-        
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(FLAGS.output, fourcc, fps, (frame_width, frame_height))
-        
+
+        if output is not None:
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(output, fourcc, fps, (frame_width, frame_height))
+
         tracker = DeepSort(max_age=20, n_init=3)
-        
+
         np.random.seed(42)
         colors = np.random.randint(0, 255, size=(len(class_names), 3))
-        
+
         class_counters = defaultdict(int)
         track_class_mapping = {}
         frame_count = 0
-        
+
         while True:
             start = datetime.datetime.now()
             ret, frame = cap.read()
             if not ret:
                 break
-            
-            tracks = process_frame(frame, model, tracker, class_names, colors)
-            frame = draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping)
-            
+
+            tracks = process_frame(frame, model, tracker, conf, class_id)
+            frame = draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping, bluf_id)
+
             end = datetime.datetime.now()
             logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
             frame_count += 1
-            
+
             fps_text = f"FPS: {1 / (end - start).total_seconds():.2f}"
             cv2.putText(frame, fps_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 8)
-            
-            writer.write(frame)
-            cv2.imshow("YOLOv10 Object tracking", frame)
+
+            if output is not None:
+                writer.write(frame)
+            frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+            cv2.imshow("YOLOv11 Object tracking", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
-        
+
         logger.info("Class counts:")
         for class_id, count in class_counters.items():
             logger.info(f"{class_names[class_id]}: {count}")
-    
+
     except Exception as e:
         logger.exception("An error occurred during processing")
     finally:
         cap.release()
-        writer.release()
+        if output is not None:
+            writer.release()
         cv2.destroyAllWindows()
+
+def main(_argv):
+    predict_and_track_video(FLAGS.model_path, FLAGS.video, FLAGS.output, FLAGS.conf, FLAGS.blur_id, FLAGS.class_id)
+
 
 if __name__ == "__main__":
     try:
