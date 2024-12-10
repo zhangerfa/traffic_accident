@@ -1,8 +1,6 @@
-import os
 import cv2
 import torch
 import datetime
-import numpy as np
 import logging
 from collections import defaultdict
 from absl import app, flags
@@ -63,53 +61,78 @@ def initialize_model(model_path):
     logger.info(f"Using {device} as processing device")
     return model
 
+# 检测-追踪
 def process_frame(frame, model, tracker, conf, class_id):
     results = model(frame, verbose=False)[0]
-    # 预测旋转框
-    bboxes = results.obb.xyxy.tolist()
-    # 分类映射和分类预测list
-    names = results.names
-    cls_ls = results.obb.cls.tolist()
-    conf_ls = results.obb.conf.tolist()
+    if results.obb:
+        # deepsort算法的入参中检测框格式只能是xywh，将obb转换为其最小外接矩形的xyxy坐标
+        bboxes = results.obb.xyxy.tolist()
+        predict_boxes = results.obb.xyxyxyxy.tolist()
+        cls_ls = results.obb.cls.tolist()
+        conf_ls = results.obb.conf.tolist()
+    else:
+        bboxes = results.boxes.xyxy.tolist()
+        predict_boxes = results.boxes.xyxy.tolist()
+        cls_ls = results.boxes.cls.tolist()
+        conf_ls = results.boxes.conf.tolist()
+
     detections = []
     for i in range(len(bboxes)):
-        class_id, confidence, bbox = int(cls_ls[i]), conf_ls[i], bboxes[i]
+        cls_id, confidence, bbox = int(cls_ls[i]), conf_ls[i], bboxes[i]
         x1, y1, x2, y2 = map(int, bbox)
         
         if class_id is None:
             if confidence < conf:
                 continue
         else:
-            if class_id != class_id or confidence < conf:
+            if cls_id != class_id or confidence < conf:
                 continue
         
-        detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, class_id])
+        detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, cls_id])
     
     tracks = tracker.update_tracks(detections, frame=frame)
-    return tracks
+    return predict_boxes, tracks
 
-def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping, blur_id):
-    for track in tracks:
+# 以原坐标画框，因为obb追踪时转换为了其最小外接矩形的xywh坐标
+def draw_tracks(frame, predict_boxes, tracks, class_names, colors, class_counters, track_class_mapping, blur_id):
+    for i, track in enumerate(tracks):
         if not track.is_confirmed():
             continue
         track_id = track.track_id
-        ltrb = track.to_ltrb()
         class_id = track.get_det_class()
-        x1, y1, x2, y2 = map(int, ltrb)
+
+        # 追踪结束后，DeepSORT 输出的追踪结果与输入的水平框具有相同的索引顺序，因此可以直接利用映射关系恢复到旋转框
+        if i > len(predict_boxes) - 1:
+            continue
+        # 画框
+        box = predict_boxes[i]
         color = colors[class_id]
+        if type(box[0]) == list:
+            # todo: 为什么显示逻辑会影响追踪效果？
+            # 显示obb的最小外接矩形
+            # ltrb = track.to_ltrb()
+            # class_id = track.get_det_class()
+            # x1, y1, x2, y2 = map(int, ltrb)
+            # utils.drwa_bboxes_by_xyxy(frame, [x1, y1, x2, y2], color)
+
+            # 显示obb
+            x1, y1 = map(int, box[0])
+            x2, y2 = map(int, box[2])
+            utils.draw_bboxes_by_obb(frame, box, color)
+        else:
+            x1, y1, x2, y2 = list(map(int, box))
+            utils.drwa_bboxes_by_xyxy(frame, box, color)
 
         # Assign a new class-specific ID if the track_id is seen for the first time
         if track_id not in track_class_mapping:
             class_counters[class_id] += 1
             track_class_mapping[track_id] = class_counters[class_id]
-        
+
         class_specific_id = track_class_mapping[track_id]
         text = f"{class_specific_id} - {class_names[class_id]}"
-        
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), color, -1)
         cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-        
+
         if blur_id is not None and class_id == blur_id:
             if 0 <= x1 < x2 <= frame.shape[1] and 0 <= y1 < y2 <= frame.shape[0]:
                 frame[y1:y2, x1:x2] = cv2.GaussianBlur(frame[y1:y2, x1:x2], (99, 99), 3)
@@ -150,8 +173,8 @@ def predict_and_track_video(model_path, video_path, output=None, conf=0.5, bluf_
             if not ret:
                 break
 
-            tracks = process_frame(frame, model, tracker, conf, class_id)
-            frame = draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping, bluf_id)
+            predict_boxes, tracks = process_frame(frame, model, tracker, conf, class_id)
+            frame = draw_tracks(frame, predict_boxes, tracks, class_names, colors, class_counters, track_class_mapping, bluf_id)
 
             end = datetime.datetime.now()
             logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
