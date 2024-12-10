@@ -10,6 +10,9 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 from ultralytics import YOLO
 
 import os
+
+import utils
+
 # 允许多版本 OpenMP 共存
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -94,7 +97,6 @@ def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_
         class_id = track.get_det_class()
         x1, y1, x2, y2 = map(int, ltrb)
         color = colors[class_id]
-        B, G, R = map(int, color)
 
         # Assign a new class-specific ID if the track_id is seen for the first time
         if track_id not in track_class_mapping:
@@ -104,8 +106,8 @@ def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_
         class_specific_id = track_class_mapping[track_id]
         text = f"{class_specific_id} - {class_names[class_id]}"
         
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (B, G, R), 2)
-        cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), (B, G, R), -1)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), color, -1)
         cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
         if blur_id is not None and class_id == blur_id:
@@ -136,8 +138,7 @@ def predict_and_track_video(model_path, video_path, output=None, conf=0.5, bluf_
 
         tracker = DeepSort(max_age=20, n_init=3)
 
-        np.random.seed(42)
-        colors = np.random.randint(0, 255, size=(len(class_names), 3))
+        colors = utils.gene_colors(class_names)
 
         class_counters = defaultdict(int)
         track_class_mapping = {}
