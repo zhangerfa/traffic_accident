@@ -6,6 +6,5 @@ dependencies:
   
   - pip:
     - torch
-    - absl-py
     - git+https://github.com/ultralytics/ultralytics.git
     - deep-sort-realtime
