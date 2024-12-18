@@ -54,9 +54,10 @@ def predict_and_track_video(yolo_weight_path, video_path, output=None, conf=0.5,
                 break
 
     except Exception as e:
-        logger.exception("An error occurred during processing")
+        logger.exception(e)
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
         if output is not None:
             writer.release()
         cv2.destroyAllWindows()
