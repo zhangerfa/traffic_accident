@@ -16,16 +16,19 @@ class ObbTracker:
     """
     封装了yolo对象识别和deepsort追踪过程
     """
-    def __init__(self, yolo_weight_path):
+    def __init__(self, yolo_weight_path, conf_threshold=0.5):
         self.yolo = initialize_yolo(yolo_weight_path)
         self.class_names = self.yolo.names
         self.tracker = DeepSort(max_age=20, n_init=3)
+        # 置信度阈值
+        self.conf_threshold = conf_threshold
         # 类别已近出现对象的计数
         self.class_counters = defaultdict(int)
         # rack_id到obj_id的映射
         self.track2obj_map = {}
 
-    def predict_and_track_frame(self, frame, conf_threshold, specified_class_id=None):
+
+    def predict_and_track_frame(self, frame, specified_class_id=None):
         """
         对输入帧进行对象识别和追踪，返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
         检测框为xyxy或xyxyxyxyx的obb格式
@@ -33,7 +36,6 @@ class ObbTracker:
         由于输入deepsort的检测框在obb的情况下不是原检测框，因此会为每个输入deepsort的检测框绑定一个哈希码（通过others字段）
         并将该哈希码映射到原检测框
 
-        conf_threshold: 置信度阈值
         specified_class_id: 类别id，如果为None则不限制类别, 否则只追踪和展示指定类别
         """
         ## 1. 预测
@@ -54,7 +56,7 @@ class ObbTracker:
             # 当指定类别id时，只追踪指定类别
             if specified_class_id is not None and cls_id != specified_class_id:
                 continue
-            if conf < conf_threshold:
+            if conf < self.conf_threshold:
                 continue
 
             detections.append([[x1, y1, x2 - x1, y2 - y1], conf, cls_id])
@@ -89,15 +91,17 @@ class ObbTracker:
 
         return self.track2obj_map[track_id]
 
-def initialize_yolo(model_path):
+def initialize_yolo(model_path, device=0):
     if not os.path.exists(model_path):
         logger.error(f"权重文件不存在：{model_path}")
         raise FileNotFoundError("Model weights file not found")
 
     yolo = YOLO(model_path)
 
+    torch.cuda.set_device(device)
+
     if torch.cuda.is_available():
-        device = torch.device("cuda")
+        device = torch.device(f"cuda:{device}")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
     else:

@@ -33,7 +33,7 @@ def predict_and_track_video(yolo_weight_path, video_path, output=None, conf=0.5,
             if not ret:
                 break
             # 预测并追踪
-            objs = obb_tracker.predict_and_track(frame, conf, class_id_id)
+            objs = obb_tracker.predict_and_track_frame(frame, conf, class_id_id)
             # 展示：画框，并添加文本：obj_id - class_name，也就是这是第 obj_id 个 class_name
             for obj in objs:
                 box, obj_id, class_id = obj
