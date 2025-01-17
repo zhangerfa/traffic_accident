@@ -25,9 +25,9 @@ class ObbTracker:
         # rack_id到obj_id的映射
         self.track2obj_map = {}
 
-    def predict_and_track(self, frame, conf_threshold, specified_class_id=None):
+    def predict_and_track_frame(self, frame, conf_threshold, specified_class_id=None):
         """
-        返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
+        对输入帧进行对象识别和追踪，返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
         检测框为xyxy或xyxyxyxyx的obb格式
 
         由于输入deepsort的检测框在obb的情况下不是原检测框，因此会为每个输入deepsort的检测框绑定一个哈希码（通过others字段）
