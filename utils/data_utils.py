@@ -7,29 +7,7 @@ import xml.etree.ElementTree as ET
 import os
 import glob
 
-import cv2
 import numpy as np
-
-from utils.draw_utils import draw_box
-
-
-def show_labels(img_path, xml_path):
-    im = cv2.imread(img_path)
-
-    # 将xml格式转化为yolo_txt格式
-    class_names = ['car']
-    res = __cibver_yolo_txt(xml_path, class_names, False)
-    # 将标注框画在图片上
-    for line in res.split('\n'):
-        if line:
-            cls_id, x1, y1, x2, y2, x3, y3, x4, y4 = [float(a) for a in line.split()]
-            draw_box(im, (x1, y1, x2, y2, x3, y3, x4, y4), class_names[int(cls_id)], (0, 255, 0))
-
-    # 长、宽等比例缩小到原来的0.5倍
-    im = cv2.resize(im, (0, 0), fx=0.5, fy=0.5)
-    cv2.imshow("output", im)
-    cv2.waitKey(0)
-
 
 def detract2yolo(path, classes):
     for set_name in ["test", "train"]:
@@ -129,7 +107,7 @@ def __normalize_coordinates(bbox, image_width, image_height):
         normalized_bbox.append(bbox[i] / image_width if i % 2 == 0 else bbox[i] / image_height)
     return normalized_bbox
 
-def __cibver_yolo_txt(xml_path, classes, normalize=True):
+def cibver_yolo_txt(xml_path, classes, normalize=True):
     # 读入xml文件
     in_file = open(xml_path, encoding='UTF-8')
     # 信息提取
@@ -176,7 +154,7 @@ def __convert_annotation(in_path, out_path, set_txt_path, classes):
         # 创建yolo_txt文件
         out_file = open(out_path + f'/{img_id}.txt', 'w')
         # 转换为yolo_txt格式
-        res = __cibver_yolo_txt(in_path + f'/{img_id}.xml', classes)
+        res = cibver_yolo_txt(in_path + f'/{img_id}.xml', classes)
         out_file.write(res)
 
 

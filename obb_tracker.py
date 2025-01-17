@@ -18,9 +18,9 @@ class ObbTracker:
     封装了yolo对象识别和deepsort追踪过程
     """
     def __init__(self, yolo_weight_path, conf_threshold=0.5):
-        self.__yolo = initialize_yolo(yolo_weight_path)
-        self.__class_names = self.__yolo.names
-        self.__tracker = DeepSort(max_age=20, n_init=3)
+        self.yolo = initialize_yolo(yolo_weight_path)
+        self.class_names = self.yolo.names
+        self.tracker = DeepSort(max_age=20, n_init=3)
         # 置信度阈值
         self.__conf_threshold = conf_threshold
         # 存储车辆轨迹：{obj_id: [[帧号, 类别id，xywhθ格式的检测框坐标], ...], ...}
@@ -44,7 +44,7 @@ class ObbTracker:
         trace_time: 当前帧的时间，用于记录轨迹
         """
         ## 1. 预测
-        results = self.__yolo(frame, verbose=False)[0]
+        results = self.yolo(frame, verbose=False)[0]
         # 解析yolo预测结果: yolo预测的检测框，检测框的最小外接矩形框——用于追踪、类别id、置信度4个list
         predict_boxes, bboxes, cls_ls, conf_ls = parse_yolo_result(results)
         ## 2. 由检测输出构建追踪输入
@@ -68,7 +68,7 @@ class ObbTracker:
             others.append(i)
             xyxy2obb_map[i] = predict_boxes[i]
         ## 3. 追踪
-        tracks = self.__tracker.update_tracks(detections, frame=frame, others=others)
+        tracks = self.tracker.update_tracks(detections, frame=frame, others=others)
         ## 4. 由追踪框获取原检测框，并和obj_id、类别id一起封装返回
         res = []
         for i, track in enumerate(tracks):

@@ -16,17 +16,6 @@ def predict_img(yolo_weight_path, img_path):
     colors = gene_colors(yolo.names)
     predict_and_show_frame(yolo, frame, colors)
 
-# 预测并展示视频，按任意键展示下一帧
-def predict_video(yolo_path, video_path):
-    yolo = initialize_yolo(yolo_path)
-    cap = cv2.VideoCapture(video_path)
-    colors = gene_colors(yolo.names)
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        predict_and_show_frame(yolo, frame, colors)
-    cap.release()
     
 def predict_and_show_frame(yolo, frame, colors):
     results = yolo.predict(frame)[0]
@@ -39,15 +28,3 @@ def predict_and_show_frame(yolo, frame, colors):
     cv2.imshow("output", frame)
     cv2.waitKey(0)
 
-def initialize_video_capture(video_input):
-    if video_input.isdigit():
-        video_input = int(video_input)
-        cap = cv2.VideoCapture(video_input)
-    else:
-        cap = cv2.VideoCapture(video_input)
-
-    if not cap.isOpened():
-        logger.error("Error: 视频不存在")
-        raise ValueError("Unable to open video source")
-
-    return cap

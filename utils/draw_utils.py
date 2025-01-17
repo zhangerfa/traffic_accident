@@ -1,9 +1,20 @@
 """
 展示检测结果的工具函数
 """
-
 import cv2
 import numpy as np
+
+def draw_trace_on_frame(trace_dict, frame):
+    """
+    将车辆轨迹绘制到传入的帧上
+    trace_ls: 车辆轨迹: {obj_id: [[x, y, w, h, angle],...],...}
+    """
+    for obj_id, trace_ls in trace_dict.items():
+        for trace in trace_ls:
+            box = trace[0]
+            x, y, w, h, angle = box
+            # 轨迹用一系列点表示，点用圆圈表示
+            cv2.circle(frame, (int(x), int(y)), 2, (0, 255, 0), -1)
 
 def draw_box(frame, box, text, color):
     """
@@ -36,6 +47,25 @@ def gene_colors(classes):
     np.random.seed(13)
     colors = np.random.randint(0, 255, size=(len(classes), 3))
     return [list(map(int, color)) for color in colors]
+
+def show_labels(img_path, xml_path):
+    from utils.data_utils import cibver_yolo_txt
+
+    im = cv2.imread(img_path)
+
+    # 将xml格式转化为yolo_txt格式
+    class_names = ['car']
+    res = cibver_yolo_txt(xml_path, class_names, False)
+    # 将标注框画在图片上
+    for line in res.split('\n'):
+        if line:
+            cls_id, x1, y1, x2, y2, x3, y3, x4, y4 = [float(a) for a in line.split()]
+            draw_box(im, (x1, y1, x2, y2, x3, y3, x4, y4), class_names[int(cls_id)], (0, 255, 0))
+
+    # 长、宽等比例缩小到原来的0.5倍
+    im = cv2.resize(im, (0, 0), fx=0.5, fy=0.5)
+    cv2.imshow("output", im)
+    cv2.waitKey(0)
 
 
 def __draw_bboxes_by_xyxy(im, xyxy, color, thickness=2):
