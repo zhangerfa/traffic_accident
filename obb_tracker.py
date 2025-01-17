@@ -5,6 +5,7 @@ from collections import defaultdict
 import torch
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from ultralytics import YOLO
+from utils.data_utils import xyxyxyxy_to_xywha
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,29 +18,33 @@ class ObbTracker:
     封装了yolo对象识别和deepsort追踪过程
     """
     def __init__(self, yolo_weight_path, conf_threshold=0.5):
-        self.yolo = initialize_yolo(yolo_weight_path)
-        self.class_names = self.yolo.names
-        self.tracker = DeepSort(max_age=20, n_init=3)
+        self.__yolo = initialize_yolo(yolo_weight_path)
+        self.__class_names = self.__yolo.names
+        self.__tracker = DeepSort(max_age=20, n_init=3)
         # 置信度阈值
-        self.conf_threshold = conf_threshold
+        self.__conf_threshold = conf_threshold
+        # 存储车辆轨迹：{obj_id: [[帧号, 类别id，xywhθ格式的检测框坐标], ...], ...}
+        self.trace_dict = {}
+
         # 类别已近出现对象的计数
-        self.class_counters = defaultdict(int)
+        self.__class_counters = defaultdict(int)
         # rack_id到obj_id的映射
-        self.track2obj_map = {}
+        self.__track2obj_map = {}
 
-
-    def predict_and_track_frame(self, frame, specified_class_id=None):
+    def predict_and_track_frame(self, frame, trace_time=-1, specified_class_id=None):
         """
         对输入帧进行对象识别和追踪，返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
+        并将追踪结果存储到self.tracks中
         检测框为xyxy或xyxyxyxyx的obb格式
 
         由于输入deepsort的检测框在obb的情况下不是原检测框，因此会为每个输入deepsort的检测框绑定一个哈希码（通过others字段）
         并将该哈希码映射到原检测框
 
         specified_class_id: 类别id，如果为None则不限制类别, 否则只追踪和展示指定类别
+        trace_time: 当前帧的时间，用于记录轨迹
         """
         ## 1. 预测
-        results = self.yolo(frame, verbose=False)[0]
+        results = self.__yolo(frame, verbose=False)[0]
         # 解析yolo预测结果: yolo预测的检测框，检测框的最小外接矩形框——用于追踪、类别id、置信度4个list
         predict_boxes, bboxes, cls_ls, conf_ls = parse_yolo_result(results)
         ## 2. 由检测输出构建追踪输入
@@ -56,14 +61,14 @@ class ObbTracker:
             # 当指定类别id时，只追踪指定类别
             if specified_class_id is not None and cls_id != specified_class_id:
                 continue
-            if conf < self.conf_threshold:
+            if conf < self.__conf_threshold:
                 continue
 
             detections.append([[x1, y1, x2 - x1, y2 - y1], conf, cls_id])
             others.append(i)
             xyxy2obb_map[i] = predict_boxes[i]
         ## 3. 追踪
-        tracks = self.tracker.update_tracks(detections, frame=frame, others=others)
+        tracks = self.__tracker.update_tracks(detections, frame=frame, others=others)
         ## 4. 由追踪框获取原检测框，并和obj_id、类别id一起封装返回
         res = []
         for i, track in enumerate(tracks):
@@ -77,6 +82,20 @@ class ObbTracker:
             obj_id = self.__track_id_to_obj_id(track.track_id, class_id)
 
             res.append([box, obj_id, class_id])
+            if obj_id not in self.trace_dict:
+                self.trace_dict[obj_id] = []
+            # 存储轨迹
+            if type(box[0]) == list:
+                # xyxyxyxy格式的检测框转换为xywhθ格式
+                xyxyxyxy = []
+                for point in box:
+                    xyxyxyxy.append(point[0])
+                    xyxyxyxy.append(point[1])
+                box = xyxyxyxy_to_xywha(xyxyxyxy)
+            else:
+                # xyxy格式的检测框转换为xywhθ格式
+                box.append(0)
+            self.trace_dict[obj_id].append([box, trace_time, class_id])
         return res
 
     def __track_id_to_obj_id(self, track_id, class_id):
@@ -85,11 +104,11 @@ class ObbTracker:
         class_id: 当前对象的类别id
         """
         # 如果track_id不在映射中，则说明是新对象
-        if track_id not in self.track2obj_map:
-            self.class_counters[class_id] += 1
-            self.track2obj_map[track_id] = self.class_counters[class_id]
+        if track_id not in self.__track2obj_map:
+            self.__class_counters[class_id] += 1
+            self.__track2obj_map[track_id] = self.__class_counters[class_id]
 
-        return self.track2obj_map[track_id]
+        return self.__track2obj_map[track_id]
 
 def initialize_yolo(model_path, device=0):
     if not os.path.exists(model_path):
