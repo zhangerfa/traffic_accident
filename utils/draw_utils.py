@@ -3,6 +3,48 @@
 """
 import cv2
 import numpy as np
+from matplotlib import pyplot as plt
+
+from utils.trace_utils import cal_speed_angle
+
+
+def draw_speed_cluster(speed_cluster_dict):
+    """
+    绘制车辆速度矢量的聚类结果
+    """
+    for cluster_id, speed_ls in speed_cluster_dict.items():
+        # 选择颜色，基于聚类标签
+        color = plt.cm.jet(cluster_id / len(speed_cluster_dict))
+
+        # 将速度矢量的长度设置为1
+        speed_ls = np.array(speed_ls)
+        speed_ls = speed_ls / np.linalg.norm(speed_ls, axis=1)[:, np.newaxis]
+
+        # 计算速度矢量的角度，以弧度表示
+        angles, [x, y] = cal_speed_angle(speed_ls)
+
+        # 画出单位圆上的点坐标
+        # plt.scatter(x, y, color=color)
+
+        # 在每个速度矢量的箭头旁标注角度
+        # angles = np.degrees(angles)
+        # for i in range(len(speed_ls)):
+        #     plt.text(speed_ls[i][0], speed_ls[i][1], str(int(angles[i])), color=color)
+
+        # 画速度矢量图：以原点为起点，以速度矢量为终点
+        x = [speed[0] for speed in speed_ls]
+        y = [speed[1] for speed in speed_ls]
+        plt.quiver(np.zeros(len(x)), np.zeros(len(x)),
+                   x, y, angles='xy', scale_units='xy', scale=1, color=color)
+
+    # 图像范围
+    lim_range = 1.2
+    plt.xlim(-lim_range, lim_range)
+    plt.ylim(-lim_range, lim_range)
+
+    # 显示图像
+    plt.grid(True)
+    plt.show()
 
 def draw_trace_on_frame(trace_dict, frame):
     """
