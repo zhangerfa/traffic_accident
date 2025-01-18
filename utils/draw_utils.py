@@ -14,7 +14,7 @@ def draw_trace_on_frame(trace_dict, frame):
             box = trace[0]
             x, y, w, h, angle = box
             # 轨迹用一系列点表示，点用圆圈表示
-            cv2.circle(frame, (int(x), int(y)), 2, (0, 255, 0), -1)
+            cv2.circle(frame, (int(x), int(y)), 1, (0, 255, 0), -1)
 
 def draw_box(frame, box, text, color):
     """

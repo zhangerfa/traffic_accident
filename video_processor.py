@@ -34,7 +34,14 @@ class VideoProcessor:
             ret, frame = self.cap.read()
             if not ret:
                 break
-            draw_trace_on_frame(self.obb_tracker.trace_dict, frame)
+            # 预测并追踪
+            objs = self.obb_tracker.predict_and_track_frame(frame)
+            # 只保留当前帧中出现车辆的轨迹
+            cur_trace_dict = {}
+            for obj in objs:
+                box, obj_id, class_id = obj
+                cur_trace_dict[obj_id] = self.obb_tracker.trace_dict[obj_id]
+            draw_trace_on_frame(cur_trace_dict, frame)
             cv2.imshow("Vehicle Trace", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
