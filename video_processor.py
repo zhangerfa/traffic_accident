@@ -28,7 +28,7 @@ class VideoProcessor:
 
     def show_trace(self):
         """
-        提取轨迹并展示
+        无人机静止情况下提取轨迹并展示：将同一辆车的轨迹用一系列点表示（如果无人机运动图片坐标系就变了，需要坐标系转换）
         """
         while True:
             ret, frame = self.cap.read()
