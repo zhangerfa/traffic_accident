@@ -42,7 +42,7 @@ class VideoProcessor:
                 box, obj_id, class_id = obj
                 cur_trace_dict[obj_id] = self.obb_tracker.trace_dict[obj_id]
             draw_trace_on_frame(cur_trace_dict, frame)
-            frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+
             cv2.imshow("Vehicle Trace", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
