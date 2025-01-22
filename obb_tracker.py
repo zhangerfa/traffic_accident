@@ -23,15 +23,13 @@ class ObbTracker:
         self.tracker = DeepSort(max_age=20, n_init=3)
         # 置信度阈值
         self.__conf_threshold = conf_threshold
-        # 存储车辆轨迹：{obj_id: [[帧号, 类别id，xywhθ格式的检测框坐标], ...], ...}
-        self.trace_dict = {}
 
         # 类别已近出现对象的计数
         self.__class_counters = defaultdict(int)
         # rack_id到obj_id的映射
         self.__track2obj_map = {}
 
-    def predict_and_track_frame(self, frame, trace_time=-1, specified_class_id=None):
+    def predict_and_track_frame(self, frame, specified_class_id=None):
         """
         对输入帧进行对象识别和追踪，返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
         并将追踪结果存储到self.tracks中
@@ -41,7 +39,6 @@ class ObbTracker:
         并将该哈希码映射到原检测框
 
         specified_class_id: 类别id，如果为None则不限制类别, 否则只追踪和展示指定类别
-        trace_time: 当前帧的时间，用于记录轨迹
         """
         ## 1. 预测
         results = self.yolo(frame, verbose=False)[0]
@@ -81,10 +78,7 @@ class ObbTracker:
             class_id = track.get_det_class()
             obj_id = self.__track_id_to_obj_id(track.track_id, class_id)
 
-            res.append([box, obj_id, class_id])
-            if obj_id not in self.trace_dict:
-                self.trace_dict[obj_id] = []
-            # 存储轨迹
+            # 将检测框转换为xywhθ格式
             if type(box[0]) == list:
                 # xyxyxyxy格式的检测框转换为xywhθ格式
                 xyxyxyxy = []
@@ -95,7 +89,8 @@ class ObbTracker:
             else:
                 # xyxy格式的检测框转换为xywhθ格式
                 box.append(0)
-            self.trace_dict[obj_id].append([box, trace_time, class_id])
+
+            res.append([box, obj_id, class_id])
         return res
 
     def __track_id_to_obj_id(self, track_id, class_id):

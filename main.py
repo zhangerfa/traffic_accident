@@ -1,5 +1,3 @@
-from trace_processor import TraceProcessor
-from utils.draw_utils import draw_trace_on_frame
 from video_processor import VideoProcessor
 
 if __name__ == "__main__":
@@ -10,7 +8,7 @@ if __name__ == "__main__":
 
     trace_path = r"D:\download\trace.csv"
 
-    video_processor = VideoProcessor(yolo_weight_path, video_path, 0.4)
+    video_processor = VideoProcessor(yolo_weight_path, video_path, 0.5)
 
     # 识别、追踪、轨迹展示
     # video_processor.predict_and_track()
@@ -18,18 +16,15 @@ if __name__ == "__main__":
     # video_processor.show_trace()
 
     # 提取车辆轨迹并保存为csv文件
-    trace_dict = video_processor.extract_trace(200)
-    trace_processor = TraceProcessor(trace_dict)
-    trace_processor.extract_trace_to_csv(trace_path)
+    # video_processor.extract_trace_to_csv(trace_path, 200)
 
     # 从csv文件中读取轨迹数据
-    # trace_processor = TraceProcessor(csv_file_path=trace_path)
+    video_processor.load_trace_from_csv(trace_path)
 
-    # 从csv中读取轨迹数据画到第0帧图片上
-    # first_frame = video_processor.get_frame(0)
-    # draw_trace_on_frame(trace_processor.trace_dict, first_frame)
+    # 将前200帧的轨迹数据画到第0帧图片上
+    # video_processor.show_trace_on_frame(0, 200)
 
-    # 从轨迹中计算车道行驶方向
-    # lane_direction = trace_processor.cal_lane_from_trace(100)
-    # print(f"车道行驶方向：{lane_direction}")
-    # trace_processor.show_speed_cluster()
+    # 从轨迹中计算第100帧中的车道行驶方向
+    lane_direction = video_processor.cal_lane_direction(100)
+    print(f"车道行驶方向：{lane_direction}")
+    video_processor.show_speed_cluster(video_processor.trace_dict, 100, 10)
