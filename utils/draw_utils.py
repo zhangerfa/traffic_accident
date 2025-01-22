@@ -5,8 +5,6 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from utils.trace_utils import cal_speed_angle
-
 
 def draw_speed_cluster(speed_cluster_dict):
     """
@@ -21,7 +19,12 @@ def draw_speed_cluster(speed_cluster_dict):
         speed_ls = speed_ls / np.linalg.norm(speed_ls, axis=1)[:, np.newaxis]
 
         # 计算速度矢量的角度，以弧度表示
-        angles, [x, y] = cal_speed_angle(speed_ls)
+        angles = [np.arctan2(v, u) for u, v in speed_ls]
+        angles = np.array(angles).reshape(-1, 1)
+
+        # 计算每个角度对应的坐标（单位圆上的点）
+        x = np.cos(angles)
+        y = np.sin(angles)
 
         # 画出单位圆上的点坐标
         # plt.scatter(x, y, color=color)
@@ -57,6 +60,9 @@ def draw_trace_on_frame(trace_dict, frame):
             x, y, w, h, angle = box
             # 轨迹用一系列点表示，点用圆圈表示
             cv2.circle(frame, (int(x), int(y)), 1, (0, 255, 0), -1)
+
+    cv2.imshow("trace", frame)
+    cv2.waitKey(0)
 
 def draw_box(frame, box, text, color):
     """
