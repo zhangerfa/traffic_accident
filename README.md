@@ -1,3 +1,5 @@
+This project is based on YOLOv10_DeepSORT by sujanshresstha, licensed under MIT License.
+
 ## 使用conda创建环境
 ```shell
 git clone https://github.com/zhangerfa/traffic_accident.git
