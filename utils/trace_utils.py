@@ -1,10 +1,7 @@
-import csv
 import logging
 
 import numpy as np
 from sklearn.cluster import DBSCAN
-
-from track.car import Car
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
