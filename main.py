@@ -11,7 +11,7 @@ if __name__ == "__main__":
     video_processor = VideoProcessor(yolo_weight_path, video_path, 0.5)
 
     # 识别、追踪、轨迹展示
-    # video_processor.predict_and_track()
+    video_processor.predict_and_track()
     # video_processor.predict()
     # video_processor.show_trace()
 
@@ -27,4 +27,4 @@ if __name__ == "__main__":
     # 从轨迹中计算第100帧中的车道行驶方向
     lane_direction = video_processor.cal_lane_direction(100)
     print(f"车道行驶方向：{lane_direction}")
-    video_processor.show_speed_cluster(list(video_processor.car_dict.values()), 100, 10)
+    video_processor.show_speed_cluster(100)

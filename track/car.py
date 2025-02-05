@@ -1,5 +1,12 @@
+"""
+存储车辆数据及计算逻辑
+"""
+import logging
+
 import cv2
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class Car:
     def __init__(self, id, class_id):
