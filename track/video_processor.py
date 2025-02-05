@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class VideoProcessor:
-    def __init__(self, yolo_weight_path, video_path, conf=0.6):
+    def __init__(self, yolo_weight_path, video_path, conf=0.6, specified_class_id=None):
         # 加载模型和视频
-        self.obb_tracker = ObbTracker(yolo_weight_path, conf)
+        self.obb_tracker = ObbTracker(yolo_weight_path, conf, specified_class_id)
         self.cap = self.initialize_video_capture(video_path)
         # 获取视频信息
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -31,22 +31,22 @@ class VideoProcessor:
         # 当前轨迹已经提取的帧数范围：[0, trace_frame_count]，也就是说当前已经提取了前trace_frame_count帧的轨迹
         self.trace_frame_count = -1
 
-    def cal_lane_direction(self, frame_index, time_span=10, class_id_id=None):
+    def cal_lane_direction(self, frame_index, time_span=10):
         """
         从轨迹中计算第frame_index帧中的车道行驶方向
         time_span: 估算车道行驶方向时的计算车辆速度矢量时的时间跨度，单位为帧数
         """
         # 提取0~frame_index帧的轨迹
-        self.__extract_trace(frame_index, class_id_id)
+        self.__extract_trace(frame_index)
         return cal_lane_from_trace(list(self.car_dict.values()), frame_index, time_span)
 
-    def extract_trace_to_csv(self, output, frame_count=None, class_id_id=None):
+    def extract_trace_to_csv(self, output, frame_count=None):
         """
         从视频中提取轨迹并保存到csv文件
         cars：car实例对象列表
         frame_count: 提取轨迹的帧数，如frame_count=200，就是提取前200帧的轨迹
         """
-        self.__extract_trace(frame_count, class_id_id)
+        self.__extract_trace(frame_count)
         cars = list(self.car_dict.values())
 
         fieldnames = ['obj_id', 'trace_time', 'class_id', 'x', 'y', 'w', 'h', 'angle']
@@ -132,7 +132,7 @@ class VideoProcessor:
         self.__extract_trace(frame_count)
         draw_trace_on_frame(list(self.car_dict.values()), frame)
 
-    def predict_and_track(self, output=None, class_id_id=None):
+    def predict_and_track(self, output=None):
         # 输出视频
         if output is not None:
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -146,7 +146,7 @@ class VideoProcessor:
             if not ret:
                 break
             # 预测并追踪
-            objs = self.obb_tracker.predict_and_track_frame(frame, class_id_id)
+            objs = self.obb_tracker.predict_and_track_frame(frame)
             # 展示：画框，并添加文本：obj_id - class_name，也就是这是第 obj_id 个 class_name
             for obj in objs:
                 box, obj_id, class_id = obj
@@ -198,7 +198,7 @@ class VideoProcessor:
             return None
         return frame
 
-    def __extract_trace(self, frame_count=0, class_id_id=None):
+    def __extract_trace(self, frame_count=0):
         """
         从视频中提取轨迹，如果已经提取过则直接返回
         frame_count: 提取轨迹的帧数，如frame_count=200，就是提取前200帧的轨迹，如果frame_count=None，则提取整个视频的轨迹
@@ -220,7 +220,7 @@ class VideoProcessor:
             if not ret:
                 break
             # 预测并追踪当前帧，更新车辆数据
-            self.__update_trace(frame, cur_frame_index, class_id_id)
+            self.__update_trace(frame, cur_frame_index)
 
             cur_frame_index += 1
             if frame_count is not None and cur_frame_index >= frame_count:
@@ -228,11 +228,11 @@ class VideoProcessor:
 
         self.trace_frame_count = cur_frame_index - 1
 
-    def __update_trace(self, frame, cur_frame, class_id_id=None):
+    def __update_trace(self, frame, cur_frame):
         """
         预测并追踪当前帧，更新car_dict，注意：传入帧必须为当前轨迹的trace_frame_count + 1帧
         """
-        objs = self.obb_tracker.predict_and_track_frame(frame, class_id_id)
+        objs = self.obb_tracker.predict_and_track_frame(frame)
         for obj in objs:
             box, obj_id, class_id = obj
             if obj_id not in self.car_dict:
