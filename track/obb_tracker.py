@@ -1,3 +1,7 @@
+"""
+对外提供指定帧的识别和追踪接口
+"""
+
 import logging
 import os
 from collections import defaultdict
@@ -34,7 +38,7 @@ class ObbTracker:
     def predict_and_track_frame(self, frame):
         """
         对输入帧进行对象识别和追踪，返回[[检测框、obj_id、对象分类id], ...]，也就是说对象由 类别-obj_id 唯一标识
-        并将追踪结果存储到self.tracks中
+        连续调用该接口应输入连续帧，否则追踪会出现断裂
         检测框为xyxy或xyxyxyxyx的obb格式
 
         由于输入deepsort的检测框在obb的情况下不是原检测框，因此会为每个输入deepsort的检测框绑定一个哈希码（通过others字段）
