@@ -6,11 +6,12 @@ import logging
 
 import cv2
 
-from obb_tracker import ObbTracker
+from track.car import Car
+from track.obb_tracker import ObbTracker
 from utils.draw_utils import draw_box, gene_colors, draw_trace_on_frame, draw_speed_cluster
 from utils.predict_utils import predict_and_show_frame
 from utils.trace_utils import cal_lane_from_trace, extract_trace_to_csv, load_trace_from_csv, \
-    extract_speed_vector_from_trace, cluster_speed_vector
+    extract_speed_ls_from_cars, cluster_speed_vector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,8 +26,8 @@ class VideoProcessor:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        # 从视频中提取的轨迹数据：{obj_id: [[xywhθ格式的检测框坐标, frame_index, cls_id], ...], ...}
-        self.trace_dict = {}
+        # 从视频中提取的车辆数据：{car_id: Car实例对象}
+        self.car_dict = {}
         # 当前轨迹已经提取的帧数范围：[0, trace_frame_count]，也就是说当前已经提取了前trace_frame_count帧的轨迹
         self.trace_frame_count = -1
 
@@ -37,18 +38,18 @@ class VideoProcessor:
         """
         # 提取0~frame_index帧的轨迹
         self.__extract_trace(frame_index, class_id_id)
-        return cal_lane_from_trace(self.trace_dict, frame_index, time_span)
+        return cal_lane_from_trace(list(self.car_dict.values()), frame_index, time_span)
 
     def extract_trace_to_csv(self, output_path, frame_count=None, class_id_id=None):
         """
         从视频中提取轨迹并保存为csv文件
         """
         self.__extract_trace(frame_count, class_id_id)
-        extract_trace_to_csv(self.trace_dict, output_path, self.trace_frame_count)
+        extract_trace_to_csv(list(self.car_dict.values()), output_path, self.trace_frame_count)
 
     def load_trace_from_csv(self, csv_file_path):
         # 从csv文件中加载轨迹数据，其中csv文件中的元数据为轨迹提取范围：trace_frame_count
-        self.trace_dict, self.trace_frame_count = load_trace_from_csv(csv_file_path)
+        self.car_dict, self.trace_frame_count = load_trace_from_csv(csv_file_path)
 
     def show_trace(self):
         """
@@ -62,11 +63,11 @@ class VideoProcessor:
             # 预测并追踪
             objs = self.__update_trace(frame, cur_frame_index)
             # 只保留当前帧中出现车辆的轨迹
-            cur_trace_dict = {}
+            cars_on_cur_frame = []
             for obj in objs:
                 box, obj_id, class_id = obj
-                cur_trace_dict[obj_id] = self.trace_dict[obj_id]
-            draw_trace_on_frame(cur_trace_dict, frame)
+                cars_on_cur_frame.append(self.car_dict[obj_id])
+            draw_trace_on_frame(cars_on_cur_frame, frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
@@ -80,7 +81,7 @@ class VideoProcessor:
         """
         frame = self.__get_frame(frame_index)
         self.__extract_trace(frame_count)
-        draw_trace_on_frame(self.trace_dict, frame)
+        draw_trace_on_frame(list(self.car_dict.values()), frame)
 
     def predict_and_track(self, output=None, class_id_id=None):
         # 输出视频
@@ -132,6 +133,9 @@ class VideoProcessor:
             if not ret:
                 break
             predict_and_show_frame(self.obb_tracker.yolo, frame, colors)
+            # 按q键退出
+            if cv2.waitKey(0) & 0xFF == ord("q"):
+                cv2.destroyAllWindows()
         self.cap.release()
 
     def __get_frame(self, frame_id):
@@ -166,7 +170,7 @@ class VideoProcessor:
             ret, frame = self.cap.read()
             if not ret:
                 break
-            # 预测并追踪当前帧，更新trace_dict
+            # 预测并追踪当前帧，更新车辆数据
             self.__update_trace(frame, cur_frame_index, class_id_id)
 
             cur_frame_index += 1
@@ -177,15 +181,15 @@ class VideoProcessor:
 
     def __update_trace(self, frame, cur_frame, class_id_id=None):
         """
-        预测并追踪当前帧，更新trace_dict，注意：传入帧必须为当前轨迹的trace_frame_count + 1帧
+        预测并追踪当前帧，更新car_dict，注意：传入帧必须为当前轨迹的trace_frame_count + 1帧
         """
         objs = self.obb_tracker.predict_and_track_frame(frame, class_id_id)
         for obj in objs:
             box, obj_id, class_id = obj
-            if obj_id not in self.trace_dict:
-                self.trace_dict[obj_id] = []
+            if obj_id not in self.car_dict:
+                self.car_dict[obj_id] = Car(obj_id, class_id)
 
-            self.trace_dict[obj_id].append([box, cur_frame, class_id])
+            self.car_dict[obj_id].trace_ls.append([box, cur_frame])
 
         return objs
 
@@ -204,11 +208,11 @@ class VideoProcessor:
         return cap
 
     @classmethod
-    def show_speed_cluster(cls, trace_dict, extract_frame, time_span=10):
+    def show_speed_cluster(cls, cars, extract_frame, time_span=10):
         """
         查看车辆速度矢量的聚类情况
         """
-        speed_ls = extract_speed_vector_from_trace(trace_dict, extract_frame, time_span)
+        speed_ls = extract_speed_ls_from_cars(cars, extract_frame, time_span)
         cluster_dict = cluster_speed_vector(speed_ls)
 
         draw_speed_cluster(cluster_dict)

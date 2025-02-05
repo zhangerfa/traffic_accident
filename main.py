@@ -1,4 +1,4 @@
-from video_processor import VideoProcessor
+from track.video_processor import VideoProcessor
 
 if __name__ == "__main__":
     yolo_weight_path = 'weights/yolo11x-obb.pt'
@@ -27,4 +27,4 @@ if __name__ == "__main__":
     # 从轨迹中计算第100帧中的车道行驶方向
     lane_direction = video_processor.cal_lane_direction(100)
     print(f"车道行驶方向：{lane_direction}")
-    video_processor.show_speed_cluster(video_processor.trace_dict, 100, 10)
+    video_processor.show_speed_cluster(list(video_processor.car_dict.values()), 100, 10)

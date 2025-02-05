@@ -1,10 +1,16 @@
 """
 展示检测结果的工具函数
 """
+import logging
+
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
+from track.car import Car
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def draw_speed_cluster(speed_cluster_dict):
     """
@@ -49,36 +55,38 @@ def draw_speed_cluster(speed_cluster_dict):
     plt.grid(True)
     plt.show()
 
-def draw_trace_on_frame(trace_dict, frame):
+def draw_trace_on_frame(cars, frame):
     """
     将车辆轨迹绘制到传入的帧上
-    trace_ls: 车辆轨迹: {obj_id: [[x, y, w, h, angle],...],...}
+    cars: Car实例对象列表
     """
-    for obj_id, trace_ls in trace_dict.items():
-        for trace in trace_ls:
+    for car in cars:
+        for trace in car.trace_ls:
             box = trace[0]
             x, y, w, h, angle = box
             # 轨迹用一系列点表示，点用圆圈表示
             cv2.circle(frame, (int(x), int(y)), 1, (0, 255, 0), -1)
 
-    cv2.imshow("trace", frame)
-    cv2.waitKey(0)
+    cv2.imshow("trace_ls", frame)
 
 def draw_box(frame, box, text, color):
     """
     frame: 原图
-    box: 检测框，可以是xyxy或者obb
+    box: 检测框，可以是xywhθ或者obb
     text: 检测框上显示的文本
     colors: 对象颜色
     """
-    if type(box[0]) == list:
-        # xyxyxyxy格式的obb
-        x1, y1 = map(int, box[0])
-        __draw_bboxes_by_obb(frame, box, color)
-    else:
-        # xyxy格式的bbox
-        x1, y1, x2, y2 = list(map(int, box))
-        __draw_bboxes_by_xyxy(frame, box, color)
+    if not Car.is_obb(box) and not Car.is_xywhangle(box):
+        logger.error("检测框格式错误！")
+        return
+    if Car.is_xywhangle(box):
+        # 将xywhθ格式的检测框转换为obb格式
+        box = Car.xywhangle_to_obb(box)
+        if box is None:
+            logger.error("xywhθ格式的检测框转换为obb格式失败！")
+            return
+    x1, y1 = map(int, box[0])
+    __draw_bboxes_by_obb(frame, box, color)
 
     cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), color, -1)
     cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
@@ -127,6 +135,7 @@ def __draw_bboxes_by_xyxy(im, xyxy, color, thickness=2):
 def __draw_bboxes_by_obb(im, obb, color, thickness=2):
     """
     画xyxyxyxy格式的检测框
+    obb: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
     """
     # 画旋转框
     x1, y1 = obb[0]
