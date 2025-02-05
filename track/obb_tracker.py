@@ -9,7 +9,7 @@ from collections import defaultdict
 import torch
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from ultralytics import YOLO
-from utils.data_utils import xyxyxyxy_to_xywha
+from train.utils.data_utils import xyxyxyxy_to_xywha
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

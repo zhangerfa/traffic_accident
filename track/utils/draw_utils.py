@@ -105,7 +105,7 @@ def gene_colors(classes):
     return [list(map(int, color)) for color in colors]
 
 def show_labels(img_path, xml_path):
-    from utils.data_utils import cibver_yolo_txt
+    from train.utils.data_utils import cibver_yolo_txt
 
     im = cv2.imread(img_path)
 

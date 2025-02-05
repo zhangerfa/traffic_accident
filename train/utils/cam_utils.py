@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # 每个方格的大小，单位为毫米
     square_size = 25
     # 图像文件夹路径
-    imgs_path = r"../data/cam_calibration/origin"
+    imgs_path = r"../../data/cam_calibration/origin"
 
     # 生成棋盘格的3D点
     objp = __generate(chessboard_size, square_size)

@@ -9,8 +9,8 @@ import cv2
 from track.car import Car
 from track.obb_tracker import ObbTracker
 from track.trace import Trace, extract_speed_ls_from_cars, cluster_speed_vector
-from utils.draw_utils import draw_box, gene_colors, draw_trace_on_frame, draw_speed_cluster
-from utils.predict_utils import predict_and_show_frame
+from track.utils.draw_utils import draw_box, gene_colors, draw_trace_on_frame, draw_speed_cluster
+from train.utils.predict_utils import predict_and_show_frame
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
