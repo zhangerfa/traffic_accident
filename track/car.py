@@ -35,9 +35,11 @@ class Car:
         """
         max_frame = self.trace_ls[-1][1]
         if len(self.trace_ls) == 0 or max_frame < extract_frame:
+            logger.error(f"Error: 当前车辆轨迹数据为空或者不包含第{extract_frame}帧的轨迹数据")
             return None
         start_index = max_frame - extract_frame
         if len(self.trace_ls[start_index:]) < time_span:
+            logger.error(f"Error: 当前车辆轨迹数据为空或者不包含第{extract_frame}帧的轨迹数据")
             return None
 
         # 由最后一帧和倒数第time_span帧的位置计算速度矢量
