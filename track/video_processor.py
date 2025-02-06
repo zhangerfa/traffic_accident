@@ -73,7 +73,6 @@ class VideoProcessor:
         """
         展示数据：将同一辆车的轨迹用一系列点表示（如果无人机运动图片坐标系就变了，需要坐标系转换）
         """
-        cur_frame_index = 0
         while True:
             ret, frame = self.cap.read()
             if not ret:
