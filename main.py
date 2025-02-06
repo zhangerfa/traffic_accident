@@ -28,3 +28,7 @@ if __name__ == "__main__":
     lane_direction = video_processor.cal_lane_direction(100)
     print(f"车道行驶方向：{lane_direction}")
     video_processor.show_speed_cluster(100)
+
+    # 获取第100帧的交通事件
+    traffic_incidents = video_processor.get_traffic_incidents(100)
+    print(f"交通事件：{traffic_incidents}")

@@ -29,6 +29,13 @@ class VideoProcessor:
         self.trace = Trace()
 
     ##################### 轨迹数据处理 #####################
+    def get_traffic_incidents(self, frame_index):
+        """
+        获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
+        """
+        self.__update_trace(frame_index)
+        return self.trace.get_traffic_incidents(frame_index)
+
     def cal_lane_direction(self, frame_index):
         """
         从轨迹中计算第frame_index帧中的车道行驶方向

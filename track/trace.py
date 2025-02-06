@@ -22,6 +22,41 @@ class Trace:
         # 当前轨迹已经提取的帧数范围：[0, trace_frame_count]，也就是说当前已经提取了前trace_frame_count帧的轨迹
         self.trace_frame_count = -1
 
+    def get_traffic_incidents(self, frame_index):
+        """
+        获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
+        """
+        cars = self.get_cars()
+        traffic_incident_dict = {}
+        # 1. 基于车辆与周围车辆关系判断交通事件
+        for car in cars:
+            cur_incidents = car.get_traffic_incidents(frame_index)
+            if cur_incidents is None:
+                continue
+            traffic_incident_dict[car.id] = cur_incidents
+        # 2. 基于车辆与道路关系判断交通事件
+        traffic_incident_dict_with_lane = self.__get_traffic_incidents_with_lane(frame_index)
+        # 3. 合并两类交通事件
+        for car_id, incidents in traffic_incident_dict_with_lane.items():
+            if car_id not in traffic_incident_dict:
+                traffic_incident_dict[car_id] = incidents
+            else:
+                traffic_incident_dict[car_id].extend(incidents)
+
+        return traffic_incident_dict
+
+    def __get_traffic_incidents_with_lane(self, frame_index):
+        """
+        获取指定帧所有与道路行驶方向有关的交通事件列表，返回格式为：{car_id:交通事件列表}
+        """
+        # 获取当前帧的车道行驶方向
+        lane_direction = self.cal_lane_direction(frame_index)
+        # todo: 获取基于车辆与道路关系判断的交通事件
+        traffic_incident_dict = {}
+        cars = self.get_cars()
+
+        return traffic_incident_dict
+
     def get_cars(self):
         """
         获取所有车辆对象
