@@ -3,8 +3,8 @@ yolo预测工具函数
 """
 import cv2
 
-from track.obb_tracker import parse_yolo_result, initialize_yolo
-from track.utils.draw_utils import gene_colors, draw_box
+from incident.obb_tracker import parse_yolo_result, initialize_yolo
+from incident.utils.draw_utils import gene_colors, draw_box
 
 
 def predict_img(yolo_weight_path, img_path):

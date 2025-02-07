@@ -1,4 +1,4 @@
-from track.video_processor import VideoProcessor
+from incident.video_processor import VideoProcessor
 
 if __name__ == "__main__":
     yolo_weight_path = 'weights/yolo11x-obb.pt'
@@ -11,7 +11,7 @@ if __name__ == "__main__":
     video_processor = VideoProcessor(yolo_weight_path, video_path, 0.5)
 
     # 识别、追踪、轨迹展示
-    video_processor.predict_and_track()
+    # video_processor.predict_and_track()
     # video_processor.predict()
     # video_processor.show_trace()
 
@@ -25,9 +25,9 @@ if __name__ == "__main__":
     # video_processor.show_trace_on_frame(0, 200)
 
     # 从轨迹中计算第100帧中的车道行驶方向
-    lane_direction = video_processor.cal_lane_direction(100)
-    print(f"车道行驶方向：{lane_direction}")
-    video_processor.show_speed_cluster(100)
+    # lane_direction = video_processor.cal_lane_direction(100)
+    # print(f"车道行驶方向：{lane_direction}")
+    # video_processor.show_speed_cluster(100)
 
     # 获取第100帧的交通事件
     traffic_incidents = video_processor.get_traffic_incidents(100)

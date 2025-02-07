@@ -7,12 +7,12 @@ import logging
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-from track.car import Car
+from incident.car import Car, CarAlongLane
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class Trace:
+class IncidentProcessor:
     """
     轨迹数据及轨迹处理逻辑
     """
@@ -21,57 +21,100 @@ class Trace:
         self.car_dict = {}
         # 当前轨迹已经提取的帧数范围：[0, trace_frame_count]，也就是说当前已经提取了前trace_frame_count帧的轨迹
         self.trace_frame_count = -1
+        # 道路行驶方向
+        self.lane_direction_dict = {}
 
     def get_traffic_incidents(self, frame_index):
         """
         获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
         """
-        cars = self.get_cars()
+        cars = self.get_cars_on_frame(frame_index)
         traffic_incident_dict = {}
-        # 1. 基于车辆与周围车辆关系判断交通事件
+        # 提取当前帧车辆的周围关系
+        self.__gene_along_lane_cars(frame_index)
+        # 遍历所有车辆提取其交通事件
         for car in cars:
             cur_incidents = car.get_traffic_incidents(frame_index)
-            if cur_incidents is None:
+            if len(cur_incidents) > 0:
+                traffic_incident_dict[car.id] = cur_incidents
+
+        return traffic_incident_dict
+
+    def __gene_along_lane_cars(self, frame_index):
+        """
+        提取指针帧的沿着道路行驶方向的车辆数据
+        """
+        # 1. 提取目标帧中的所有车辆，并将其坐标投影到道路行驶坐标系
+        along_lane_cars_on_target_frame = []
+        for car in self.get_cars_on_frame(frame_index):
+            # 将车辆的坐标、速度转换到道路行驶坐标系
+            box = car.get_box_on_frame(frame_index)
+            speed = car.get_speed_on_frame(frame_index)
+            if box or speed is None:
                 continue
-            traffic_incident_dict[car.id] = cur_incidents
-        # 2. 基于车辆与道路关系判断交通事件
-        traffic_incident_dict_with_lane = self.__get_traffic_incidents_with_lane(frame_index)
-        # 3. 合并两类交通事件
-        for car_id, incidents in traffic_incident_dict_with_lane.items():
-            if car_id not in traffic_incident_dict:
-                traffic_incident_dict[car_id] = incidents
-            else:
-                traffic_incident_dict[car_id].extend(incidents)
+            pos, angle = self.__trans_to_lane_direction(frame_index, [box[0], box[1]], box[4])
+            speed, _ = self.__trans_to_lane_direction(frame_index, speed)
 
-        return traffic_incident_dict
+            along_lane_car = CarAlongLane(pos, speed, angle)
+            along_lane_cars_on_target_frame.append(along_lane_car)
+        # 2. 将车辆按道路行驶方向的远近排序
 
-    def __get_traffic_incidents_with_lane(self, frame_index):
+        # todo:3. 提取车辆的周围车辆信息
+        for along_lane_car in along_lane_cars_on_target_frame:
+            pass
+
+    def __trans_to_lane_direction(self, frame_index, pos=None, angle=None):
         """
-        获取指定帧所有与道路行驶方向有关的交通事件列表，返回格式为：{car_id:交通事件列表}
+        将向量、角度转换到道路行驶方向坐标系
         """
-        # 获取当前帧的车道行驶方向
+        x_new = None
+        y_new = None
+        angle_new = None
+
         lane_direction = self.cal_lane_direction(frame_index)
-        # todo: 获取基于车辆与道路关系判断的交通事件
-        traffic_incident_dict = {}
-        cars = self.get_cars()
 
-        return traffic_incident_dict
+        # todo：车辆和道路行驶方向配对问题（道路行驶方向边界问题）
+        if len(lane_direction) == 0:
+            return [-1, -1], -1
+        lane_angle = lane_direction[0]
+        if pos is not None:
+            x, y = pos
 
-    def get_cars(self):
+            # 计算旋转矩阵
+            cos_theta = np.cos(lane_angle)
+            sin_theta = np.sin(lane_angle)
+
+            x_new = cos_theta * x - sin_theta * y
+            y_new = sin_theta * x + cos_theta * y
+
+        if angle is not None:
+            angle_new = angle - lane_angle
+
+        return [x_new, y_new], angle_new
+
+    def get_cars_on_frame(self, frame_index=None):
         """
-        获取所有车辆对象
+        获取指定帧上的所有车辆对象，如果不传入frame_index则获取所有车辆
         """
+        if frame_index is not None:
+            cars = []
+            for car in self.car_dict.values():
+                if car.is_extract_frame_valid(frame_index):
+                    cars.append(car)
+            return cars
         return list(self.car_dict.values())
 
     def cal_lane_direction(self, frame_index, time_span=10):
         """
-        从轨迹中计算第frame_index帧中的车道行驶方向
+        从轨迹中计算第frame_index帧中的车道行驶方向，单位为弧度
         time_span: 估算车道行驶方向时的计算车辆速度矢量时的时间跨度，单位为帧数
         """
+        if frame_index in self.lane_direction_dict:
+            return self.lane_direction_dict[frame_index]
         if frame_index > self.trace_frame_count:
             raise ValueError(f"Error: 当前轨迹中不包含第{frame_index}帧的轨迹数据，请在调用Trace接口前更新轨迹数据")
 
-        cars = self.get_cars()
+        cars = self.get_cars_on_frame(frame_index)
         lane_direction = {}
         # 获取指定帧的所有车辆速度矢量
         speed_vector_ls = extract_speed_ls_from_cars(cars, frame_index, time_span)
@@ -87,6 +130,7 @@ class Trace:
             speed_vector_sum = np.sum(speed_vector_ls, axis=0)
             lane_direction[cluster_id] = np.degrees(np.arctan2(speed_vector_sum[1], speed_vector_sum[0]))
 
+        self.lane_direction_dict[frame_index] = lane_direction
         return lane_direction
 
     def to_csv(self, output):
@@ -158,7 +202,7 @@ class Trace:
         for obj_id, trace_ls in car_dict.items():
             if obj_id not in self.car_dict:
                 self.car_dict[obj_id] = Car(obj_id, trace_ls[0][2])
-            self.car_dict[obj_id].trace_ls.extend(trace_ls)
+            self.car_dict[obj_id].add_trace(trace_ls)
         self.trace_frame_count = trace_frame_count
 
 def extract_speed_ls_from_cars(cars, extract_frame, time_span=10):

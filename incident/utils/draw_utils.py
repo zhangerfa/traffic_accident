@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from track.car import Car
+from incident.car import Car
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
