@@ -199,10 +199,11 @@ class IncidentProcessor:
         """
         添加轨迹数据
         """
-        for obj_id, trace_ls in car_dict.items():
+        for obj_id, car in car_dict.items():
             if obj_id not in self.car_dict:
-                self.car_dict[obj_id] = Car(obj_id, trace_ls[0][2])
-            self.car_dict[obj_id].add_trace(trace_ls)
+                self.car_dict[obj_id] = car
+            else:
+                self.car_dict[obj_id].add_trace(car.trace_ls)
         self.trace_frame_count = trace_frame_count
 
 def extract_speed_ls_from_cars(cars, extract_frame, time_span=10):

@@ -67,7 +67,9 @@ def draw_trace_on_frame(cars, frame):
             # 轨迹用一系列点表示，点用圆圈表示
             cv2.circle(frame, (int(x), int(y)), 1, (0, 255, 0), -1)
 
+    frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
     cv2.imshow("trace_ls", frame)
+    cv2.waitKey(0)
 
 def draw_box(frame, box, text, color):
     """
