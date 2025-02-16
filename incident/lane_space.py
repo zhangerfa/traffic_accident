@@ -7,12 +7,14 @@ import logging
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-from incident.car import Car, CarAlongLane
+from incident.Incident import Incident
+from incident.car import Car
+from incident.along_lane_car import AlongLaneCar
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class IncidentProcessor:
+class LaneSpace:
     """
     轨迹数据及轨迹处理逻辑
     """
@@ -26,17 +28,28 @@ class IncidentProcessor:
 
     def get_traffic_incidents(self, frame_index):
         """
-        获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
+        获取指定帧所有交通事件列表，返回格式为：{car_id:Incident列表}
         """
         cars = self.get_cars_on_frame(frame_index)
         traffic_incident_dict = {}
-        # 提取当前帧车辆的周围关系
-        self.__gene_along_lane_cars(frame_index)
-        # 遍历所有车辆提取其交通事件
+        # 1. 遍历所有车辆提取基于车辆自身的交通事件列表
         for car in cars:
             cur_incidents = car.get_traffic_incidents(frame_index)
             if len(cur_incidents) > 0:
                 traffic_incident_dict[car.id] = cur_incidents
+        # 提取当前帧车辆的周围关系
+        along_lane_cars =  self.__gene_along_lane_cars(frame_index)
+        for along_lane_car in along_lane_cars:
+            # 2. 获取基于车辆周围车辆关系的交通事件列表
+            cur_incidents = along_lane_car.get_traffic_incidents()
+            # 3. 提取基于道路行驶规则的交通事件列表
+            if along_lane_car.angle > 150:
+                cur_incidents.append(Incident.WRONG_WAY)
+            # 合并当前车所有类型的交通事件
+            if len(cur_incidents) > 0:
+                if along_lane_car.id not in traffic_incident_dict:
+                    traffic_incident_dict[along_lane_car.id] = []
+                traffic_incident_dict[along_lane_car.id].extend(cur_incidents)
 
         return traffic_incident_dict
 
@@ -55,13 +68,15 @@ class IncidentProcessor:
             pos, angle = self.__trans_to_lane_direction(frame_index, [box[0], box[1]], box[4])
             speed, _ = self.__trans_to_lane_direction(frame_index, speed)
 
-            along_lane_car = CarAlongLane(pos, speed, angle)
+            along_lane_car = AlongLaneCar(pos, speed, angle)
             along_lane_cars_on_target_frame.append(along_lane_car)
         # 2. 将车辆按道路行驶方向的远近排序
 
         # todo:3. 提取车辆的周围车辆信息
         for along_lane_car in along_lane_cars_on_target_frame:
             pass
+
+        return along_lane_cars_on_target_frame
 
     def __trans_to_lane_direction(self, frame_index, pos=None, angle=None):
         """
@@ -99,7 +114,7 @@ class IncidentProcessor:
         if frame_index is not None:
             cars = []
             for car in self.car_dict.values():
-                if car.is_extract_frame_valid(frame_index):
+                if car.is_on_frame(frame_index):
                     cars.append(car)
             return cars
         return list(self.car_dict.values())
@@ -148,8 +163,9 @@ class IncidentProcessor:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             # 写入列名（表头）
             writer.writeheader()
-            # 写入数据
+            # 写入每辆车的轨迹
             for car in cars:
+                # todo car做个接口
                 for trace in car.trace_ls:
                     box = trace[0]
                     row = {
@@ -186,6 +202,7 @@ class IncidentProcessor:
 
                 if obj_id not in self.car_dict:
                     self.car_dict[obj_id] = Car(obj_id, class_id)
+                # todo car做个接口
                 self.car_dict[obj_id].trace_ls.append([box, trace_time])
         logger.info(f"轨迹已从{csv_file_path}加载")
 

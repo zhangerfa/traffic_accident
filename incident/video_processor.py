@@ -8,7 +8,7 @@ import cv2
 
 from incident.car import Car
 from incident.obb_tracker import ObbTracker
-from incident.incident_processor import IncidentProcessor, extract_speed_ls_from_cars, cluster_speed_vector
+from incident.lane_space import LaneSpace, extract_speed_ls_from_cars, cluster_speed_vector
 from incident.utils.draw_utils import draw_box, gene_colors, draw_trace_on_frame, draw_speed_cluster
 from train.utils.predict_utils import predict_and_show_frame
 
@@ -25,8 +25,8 @@ class VideoProcessor:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        # 交通事件处理器
-        self.incident_processor = IncidentProcessor()
+        # 道路空间
+        self.lane_space = LaneSpace()
 
     ##################### 轨迹数据处理 #####################
     def get_traffic_incidents(self, target_frame=None):
@@ -63,14 +63,14 @@ class VideoProcessor:
         获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
         """
         self.__update_trace(frame_index)
-        return self.incident_processor.get_traffic_incidents(frame_index)
+        return self.lane_space.get_traffic_incidents(frame_index)
 
     def cal_lane_direction(self, frame_index):
         """
         从轨迹中计算第frame_index帧中的车道行驶方向
         """
         self.__update_trace(frame_index)
-        return self.incident_processor.cal_lane_direction(frame_index)
+        return self.lane_space.cal_lane_direction(frame_index)
 
     def extract_trace_to_csv(self, output, target_frame=None):
         """
@@ -80,20 +80,20 @@ class VideoProcessor:
             logger.error("Error: 未指定输出路径或输出路径不是csv文件")
             return
         self.__update_trace(target_frame)
-        self.incident_processor.to_csv(output)
+        self.lane_space.to_csv(output)
 
     def load_trace_from_csv(self, csv_file_path):
         """
         从csv文件中读取轨迹数据
         """
-        self.incident_processor.load_trace_from_csv(csv_file_path)
+        self.lane_space.load_trace_from_csv(csv_file_path)
 
     ##################### 轨迹展示方法 #####################
     def show_speed_cluster(self, extract_frame, time_span=10):
         """
         查看车辆速度矢量的聚类情况
         """
-        speed_ls = extract_speed_ls_from_cars(self.incident_processor.get_cars_on_frame(extract_frame),
+        speed_ls = extract_speed_ls_from_cars(self.lane_space.get_cars_on_frame(extract_frame),
                                               extract_frame, time_span)
         cluster_dict = cluster_speed_vector(speed_ls)
 
@@ -113,7 +113,7 @@ class VideoProcessor:
             cars_on_cur_frame = []
             for obj in objs:
                 box, obj_id, class_id = obj
-                cars_on_cur_frame.append(self.incident_processor.car_dict[obj_id])
+                cars_on_cur_frame.append(self.lane_space.car_dict[obj_id])
             draw_trace_on_frame(cars_on_cur_frame, frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -127,7 +127,7 @@ class VideoProcessor:
         """
         frame = self.__get_frame(show_frame_index)
         self.__update_trace(target_from)
-        draw_trace_on_frame(self.incident_processor.get_cars_on_frame(show_frame_index), frame)
+        draw_trace_on_frame(self.lane_space.get_cars_on_frame(show_frame_index), frame)
 
     ##################### 识别和追踪展示方法 #####################
 
@@ -198,6 +198,7 @@ class VideoProcessor:
         return frame
 
     def __update_trace(self, target_frame):
+        # todo: 当target_frame ＜ cur_frame_index时，应该只保留前target_frame帧的轨迹，需要两个容器来存储轨迹，一个用于计算，一个用于缓存，函数总是返回用于计算的容器
         """
         从视频中提取前target_frame帧的轨迹数据，如果target_frame为None则提取整个视频的轨迹
         """
@@ -205,7 +206,7 @@ class VideoProcessor:
             target_frame = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # 从self.trace_frame_count + 1帧开始提取轨迹
-        cur_frame_index = self.incident_processor.get_start_update_frame()
+        cur_frame_index = self.lane_space.get_start_update_frame()
         if target_frame <= cur_frame_index:
             return
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, cur_frame_index)
@@ -230,7 +231,7 @@ class VideoProcessor:
             if cur_frame_index >= target_frame:
                 break
 
-        self.incident_processor.add_trace(car_dict, cur_frame_index - 1)
+        self.lane_space.add_trace(car_dict, cur_frame_index - 1)
 
 def initialize_video_capture(video_input):
     if video_input.isdigit():

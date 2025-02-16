@@ -2,7 +2,6 @@
 存储车辆的历史轨迹数据，以及特定帧的周围车辆信息
 """
 import logging
-import math
 
 import cv2
 
@@ -21,6 +20,7 @@ class Car:
         self.length = None
         # 车辆宽度
         self.width = None
+        # todo: 改为trace_frame_dict {frame_index: [x, y, angle]】}
         # 车辆历史轨迹：[[xywhθ格式的坐标, frame_index], ...]，轨迹中数据的顺序随着frame_index的增加而增加
         self.trace_ls = []
         # 车辆在不同帧的沿着道路行驶方向的车辆信息缓存：{frame_index: 对应帧的CarAlongLane实例对象, ...}
@@ -48,52 +48,15 @@ class Car:
         # 2. 将增量轨迹添加到轨迹列表中
         self.trace_ls.extend(trace_ls)
 
-    def add_car_base_along_lane(self, frame_index, pos, angle, speed):
-        """
-        添加一帧的车辆基本信息
-        pos, angle, speed 分别是道路行驶方向的车辆位置、角度、速度
-        """
-        self.along_lane_frame_dict[frame_index] = CarAlongLane(pos, angle, speed)
-
     def get_traffic_incidents(self, frame_index):
         """
-        获取基于车辆和周围车辆关系可以判断的指定帧车辆匹配的交通事件列表
+        获取基于车辆自身的交通事件
         返回Incident枚举类列表
         """
         traffic_incidents = []
-        if frame_index not in self.along_lane_frame_dict:
-            logger.error(f"Error: 还未提取第{frame_index}帧的道路行驶坐标系下的车辆数据")
-            return traffic_incidents
-
-        # 获取与周围车辆有关的交通事件
-        traffic_incidents.append(self.__get_incident_with_nearby(frame_index))
-        # 获取与道路行驶方向有关的交通事件
-        traffic_incidents.append(self.__get_incidents_with_lane(frame_index))
-
-        return traffic_incidents
-
-    def __get_incident_with_nearby(self, frame_index):
-        """
-        获取指定帧所有与周围车辆有关的交通事件列表
-        返回Incident枚举类列表
-        """
-        # todo:获取与周围车辆有关的交通事件
-        traffic_incidents = []
-        # 判断车辆与周围车辆的距离是否满足安全距离
-        car_along_lane = self.along_lane_frame_dict[frame_index]
-        if car_along_lane.get_gap_to_pre_car() < 10:
-            traffic_incidents.append(Incident.TOO_CLOSE_PRE)
-
-        return traffic_incidents
-
-    def __get_incidents_with_lane(self, frame_index):
-        """
-        获取指定帧所有与道路行驶方向有关的交通事件列表
-        返回Incident枚举类列表
-        """
-        traffic_incidents = []
-        if self.along_lane_frame_dict[frame_index].is_retrograde():
-            traffic_incidents.append(Incident.BACK_UP)
+        speed = self.get_speed_on_frame(frame_index)
+        if speed is not None and speed[0] > 120:
+            traffic_incidents.append(Incident.OVER_SPEED)
 
         return traffic_incidents
 
@@ -129,7 +92,7 @@ class Car:
 
         return speed_vector
 
-    def is_extract_frame_valid(self, extract_frame):
+    def is_on_frame(self, extract_frame):
         """
         判断提取帧是否有效
         """
@@ -189,81 +152,3 @@ class Car:
         rotated_box = cv2.boxPoints(((x, y), (w, h), theta))  # 获取旋转矩形的四个顶点
 
         return rotated_box
-
-class CarAlongLane:
-    """
-    存储一帧中在道路行驶方向坐标下的车辆的位置和周围车辆等信息信息
-    """
-    def __init__(self, pos, angle, speed):
-        # 车辆位置，在道路行驶方向坐标系下
-        self.pos = pos
-        # 车辆速度，在道路行驶方向坐标系下
-        self.speed = speed
-        # 车辆角度
-        self.angle = angle
-        # 前车，类型为Car实例对象，下同
-        self.pre_car = None
-        # 后车
-        self.behind_car = None
-        # 左前车
-        self.left_pre_car = None
-        # 右前车
-        self.right_pre_car = None
-        # 左后车
-        self.left_behind_car = None
-        # 右后车
-        self.right_behind_car = None
-
-    def is_retrograde(self):
-        """
-        判断车辆是否逆行，也就是车辆行驶方向和道路行驶方向角度相差角度是否大于阈值
-        """
-        return math.fabs(self.angle)  > 150
-
-    def get_gap_to_pre_car(self):
-        """
-        获取与前车的距离
-        """
-        if self.pre_car is None:
-            return float('inf')
-        return self.pre_car.pos[0] - self.pos[0], self.pre_car.pos[1] - self.pos[1]
-
-    def get_gap_to_behind_car(self):
-        """
-        获取与后车的距离
-        """
-        if self.behind_car is None:
-            return float('inf')
-        return self.behind_car.pos[0] - self.pos[0], self.behind_car.pos[1] - self.pos[1]
-
-    def get_gap_to_left_pre_car(self):
-        """
-        获取与左前车的距离
-        """
-        if self.left_pre_car is None:
-            return float('inf')
-        return self.left_pre_car.pos[0] - self.pos[0], self.left_pre_car.pos[1] - self.pos[1]
-
-    def get_gap_to_right_pre_car(self):
-        """
-        获取与右前车的距离
-        """
-        if self.right_pre_car is None:
-            return float('inf')
-        return self.right_pre_car.pos[0] - self.pos[0], self.right_pre_car.pos[1] - self.pos[1]
-
-    def get_gap_to_left_behind_car(self):
-        """
-        获取与左后车的距离
-        """
-        if self.left_behind_car is None:
-            return float('inf')
-        return self.left_behind_car.pos[0] - self.pos[0], self.left_behind_car.pos[1] - self.pos[1]
-
-    def get_gap_to_right_behind_car(self):
-        """
-        获取与右后车的距离
-        """
-        if self.right_behind_car is None:
-            return float('inf')
-        return self.right_behind_car.pos[0] - self.pos[0], self.right_behind_car.pos[1] - self.pos[1]
