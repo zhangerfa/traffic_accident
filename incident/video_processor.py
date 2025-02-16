@@ -25,11 +25,40 @@ class VideoProcessor:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        # 轨迹数据
+        # 交通事件处理器
         self.incident_processor = IncidentProcessor()
 
     ##################### 轨迹数据处理 #####################
-    def get_traffic_incidents(self, frame_index):
+    def get_traffic_incidents(self, target_frame=None):
+        """
+        获取前target_frame帧视频中的所有交通事件，如果target_frame为None则提取整个视频的交通事件
+        返回格式：{car_id: {事件名称: 发生事件的帧数列表}, ...}
+        """
+        if target_frame is None:
+            target_frame = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # 预热1秒
+        if target_frame < self.fps:
+            logger.error("Error: 前1秒无法提取交通事件")
+            return {}
+        self.__update_trace(self.fps)
+
+        # 每隔三分之一秒提取一次交通事件
+        traffic_incidents = {}
+        for frame_index in range(self.fps + 1, target_frame, self.fps // 3):
+            traffic_incidents_on_frame = self.__get_traffic_incidents_on_frame(frame_index)
+            if len(traffic_incidents_on_frame) > 0:
+                for car_id, incidents in traffic_incidents_on_frame.items():
+                    if car_id not in traffic_incidents:
+                        traffic_incidents[car_id] = {}
+                    for incident in incidents:
+                        if incident not in traffic_incidents[car_id]:
+                            traffic_incidents[car_id][incident] = []
+                        traffic_incidents[car_id][incident].append(frame_index)
+
+        return traffic_incidents
+
+    def __get_traffic_incidents_on_frame(self, frame_index):
         """
         获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
         """
