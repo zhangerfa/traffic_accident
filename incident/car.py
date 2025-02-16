@@ -6,6 +6,8 @@ import math
 
 import cv2
 
+from incident.Incident import Incident
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,9 @@ class Car:
         self.along_lane_frame_dict = {}
 
     def add_traces(self, trace_ls):
-
+        """
+        trace_ls是一组轨迹数据，格式为[[xywhθ格式的坐标, frame_index], ...]
+        """
         # 1. 更新车辆长宽
         # 计算增量轨迹中车辆长宽均值
         length_ls = [trace[0][3] for trace in trace_ls]
@@ -54,6 +58,7 @@ class Car:
     def get_traffic_incidents(self, frame_index):
         """
         获取基于车辆和周围车辆关系可以判断的指定帧车辆匹配的交通事件列表
+        返回Incident枚举类列表
         """
         traffic_incidents = []
         if frame_index not in self.along_lane_frame_dict:
@@ -70,23 +75,25 @@ class Car:
     def __get_incident_with_nearby(self, frame_index):
         """
         获取指定帧所有与周围车辆有关的交通事件列表
+        返回Incident枚举类列表
         """
         # todo:获取与周围车辆有关的交通事件
         traffic_incidents = []
         # 判断车辆与周围车辆的距离是否满足安全距离
         car_along_lane = self.along_lane_frame_dict[frame_index]
         if car_along_lane.get_gap_to_pre_car() < 10:
-            traffic_incidents.append("与前车距离过近")
+            traffic_incidents.append(Incident.TOO_CLOSE_PRE)
 
         return traffic_incidents
 
     def __get_incidents_with_lane(self, frame_index):
         """
         获取指定帧所有与道路行驶方向有关的交通事件列表
+        返回Incident枚举类列表
         """
         traffic_incidents = []
         if self.along_lane_frame_dict[frame_index].is_retrograde():
-            traffic_incidents.append("逆行/倒车")
+            traffic_incidents.append(Incident.BACK_UP)
 
         return traffic_incidents
 
