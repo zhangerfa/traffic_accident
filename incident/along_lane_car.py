@@ -1,4 +1,8 @@
+import math
+
 from incident.Incident import Incident
+from incident.car import Car
+
 
 class AlongLaneCar:
     """
@@ -32,13 +36,14 @@ class AlongLaneCar:
 
     def get_traffic_incidents(self):
         """
-        获取车辆的基于周围车辆关系的交通事件
-        返回值为Incident列表
+        获取车辆的基于周围车辆关系的交通事件，返回值为Incident列表
         """
         incidents = []
-        distance_to_pre_car = self.get_distance_to_target(self.pre_car)
-        if distance_to_pre_car[0] > 2 * self.length:
-            incidents.append(Incident.TOO_CLOSE_PRE)
+        # 判断是否逆行/倒车
+        if Car.get_speed_angle([self.speed])[0] > math.pi / 2:
+            incidents.append(Incident.BACK_UP)
+
+        return incidents
 
     def get_distance_to_target(self, target_car):
         """
@@ -47,3 +52,14 @@ class AlongLaneCar:
         if target_car is None:
             return float('inf')
         return target_car.pos[0] - self.pos[0], target_car.pos[1] - self.pos[1]
+
+
+
+
+
+
+
+
+
+
+

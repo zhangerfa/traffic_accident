@@ -8,7 +8,7 @@ import cv2
 
 from incident.car import Car
 from incident.obb_tracker import ObbTracker
-from incident.lane_space import LaneSpace, extract_speed_ls_from_cars, cluster_speed_vector
+from incident.incident_processor import extract_speed_ls_from_cars, cluster_speed_vector
 from incident.utils.draw_utils import draw_box, gene_colors, draw_trace_on_frame, draw_speed_cluster
 from train.utils.predict_utils import predict_and_show_frame
 
@@ -25,68 +25,44 @@ class VideoProcessor:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        # 道路空间
-        self.lane_space = LaneSpace()
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    ##################### 轨迹数据处理 #####################
-    def get_traffic_incidents(self, target_frame=None):
+    def get_trace(self, start_frame, end_frame, motion_matrix_ls=None, camera_matrix=None):
+        # todo: 当target_frame ＜ cur_frame_index时，应该只保留前target_frame帧的轨迹，需要两个容器来存储轨迹，一个用于计算，一个用于缓存，函数总是返回用于计算的容器
         """
-        获取前target_frame帧视频中的所有交通事件，如果target_frame为None则提取整个视频的交通事件
-        返回格式：{car_id: {事件名称: 发生事件的帧数列表}, ...}
+        从视频中提取[start_frame, end_frame]帧索引范围内的轨迹数据，返回值:{car_id: List[Box], ...}
+        需要注意的是：为了保证轨迹的连续，连续调用该接口时入参的帧索引范围也应该连续，如果两次调用该接口所获取的轨迹的帧范围不连续，那么轨迹也会出现不连续，可能造成同一辆车的轨迹被识别为两辆车的轨迹的情况
+
+
+        motion_matrix_ls, camera_matrix: 无人机运动矩阵列表，相机矩阵，用于后续投影
         """
         if target_frame is None:
-            target_frame = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            target_frame = self.frame_count
 
-        # 预热1秒
-        if target_frame < self.fps:
-            logger.error("Error: 前1秒无法提取交通事件")
-            return {}
-        self.__update_trace(self.fps)
-
-        # 每隔三分之一秒提取一次交通事件
-        traffic_incidents = {}
-        for frame_index in range(self.fps + 1, target_frame, self.fps // 3):
-            traffic_incidents_on_frame = self.__get_traffic_incidents_on_frame(frame_index)
-            if len(traffic_incidents_on_frame) > 0:
-                for car_id, incidents in traffic_incidents_on_frame.items():
-                    if car_id not in traffic_incidents:
-                        traffic_incidents[car_id] = {}
-                    for incident in incidents:
-                        if incident not in traffic_incidents[car_id]:
-                            traffic_incidents[car_id][incident] = []
-                        traffic_incidents[car_id][incident].append(frame_index)
-
-        return traffic_incidents
-
-    def __get_traffic_incidents_on_frame(self, frame_index):
-        """
-        获取指定帧所有交通事件列表，返回格式为：{car_id:交通事件列表}
-        """
-        self.__update_trace(frame_index)
-        return self.lane_space.get_traffic_incidents(frame_index)
-
-    def cal_lane_direction(self, frame_index):
-        """
-        从轨迹中计算第frame_index帧中的车道行驶方向
-        """
-        self.__update_trace(frame_index)
-        return self.lane_space.cal_lane_direction(frame_index)
-
-    def extract_trace_to_csv(self, output, target_frame=None):
-        """
-        从视频中提取前帧的轨迹并保存到output指定的路径下（需要为csv文件），如果target_frame为None则提取整个视频的轨迹
-        """
-        if output is None or output.split(".")[-1] != "csv":
-            logger.error("Error: 未指定输出路径或输出路径不是csv文件")
+        # 从self.__trace_frame_count + 1帧开始提取轨迹
+        if target_frame <= cur_frame_index:
             return
-        self.__update_trace(target_frame)
-        self.lane_space.to_csv(output)
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, cur_frame_index)
 
-    def load_trace_from_csv(self, csv_file_path):
-        """
-        从csv文件中读取轨迹数据
-        """
-        self.lane_space.load_trace_from_csv(csv_file_path)
+        logger.info(f"正在获取{cur_frame_index} ~ {target_frame} 帧的轨迹数据")
+
+        car_dict = {}
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            # 识别和追踪当前帧
+            objs = self.obb_tracker.predict_and_track_frame(frame)
+            for obj in objs:
+                box, obj_id, class_id = obj
+                if obj_id not in car_dict:
+                    car_dict[obj_id] = Car(obj_id, class_id, 1 / self.fps)
+
+                car_dict[obj_id].trace_ls.append([box, cur_frame_index])
+
+            cur_frame_index += 1
+            if cur_frame_index >= target_frame:
+                break
 
     ##################### 轨迹展示方法 #####################
     def show_speed_cluster(self, extract_frame, time_span=10):
@@ -126,7 +102,7 @@ class VideoProcessor:
         将前target_frame帧的轨迹数据画到show_frame_index帧上并展示，如果target_from为None则展示整个视频的轨迹
         """
         frame = self.__get_frame(show_frame_index)
-        self.__update_trace(target_from)
+        self.get_trace(target_from)
         draw_trace_on_frame(self.lane_space.get_cars_on_frame(show_frame_index), frame)
 
     ##################### 识别和追踪展示方法 #####################
@@ -196,42 +172,6 @@ class VideoProcessor:
             logger.error(f"Error: 未找到第{frame_id}帧")
             return None
         return frame
-
-    def __update_trace(self, target_frame):
-        # todo: 当target_frame ＜ cur_frame_index时，应该只保留前target_frame帧的轨迹，需要两个容器来存储轨迹，一个用于计算，一个用于缓存，函数总是返回用于计算的容器
-        """
-        从视频中提取前target_frame帧的轨迹数据，如果target_frame为None则提取整个视频的轨迹
-        """
-        if target_frame is None:
-            target_frame = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        # 从self.trace_frame_count + 1帧开始提取轨迹
-        cur_frame_index = self.lane_space.get_start_update_frame()
-        if target_frame <= cur_frame_index:
-            return
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, cur_frame_index)
-
-        logger.info(f"正在获取{cur_frame_index} ~ {target_frame} 帧的轨迹数据")
-
-        car_dict = {}
-        while True:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            # 识别和追踪当前帧
-            objs = self.obb_tracker.predict_and_track_frame(frame)
-            for obj in objs:
-                box, obj_id, class_id = obj
-                if obj_id not in car_dict:
-                    car_dict[obj_id] = Car(obj_id, class_id)
-
-                car_dict[obj_id].trace_ls.append([box, cur_frame_index])
-
-            cur_frame_index += 1
-            if cur_frame_index >= target_frame:
-                break
-
-        self.lane_space.add_trace(car_dict, cur_frame_index - 1)
 
 def initialize_video_capture(video_input):
     if video_input.isdigit():

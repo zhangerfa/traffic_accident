@@ -61,6 +61,7 @@ def draw_trace_on_frame(cars, frame):
     cars: Car实例对象列表
     """
     for car in cars:
+        # todo 改
         for trace in car.trace_ls:
             box = trace[0]
             x, y, w, h, angle = box

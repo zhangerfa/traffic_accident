@@ -32,7 +32,7 @@ class ObbTracker:
 
         # 类别已近出现对象的计数
         self.__class_counters = defaultdict(int)
-        # rack_id到obj_id的映射
+        # track_id到obj_id的映射
         self.__track2obj_map = {}
 
     def predict_and_track_frame(self, frame):
@@ -99,7 +99,7 @@ class ObbTracker:
 
     def __track_id_to_obj_id(self, track_id, class_id):
         """
-        obj_id是表示当前对象是所属类的第几个对象，，也就是说对象由 类别-obj_id 唯一标识，track_id则是追踪id，也可以唯一标识对象，但不区分类
+        obj_id是表示当前对象是所属类的第几个对象，也就是说对象由 类别-obj_id 唯一标识，track_id则是追踪id，也可以唯一标识对象，但不区分类
         class_id: 当前对象的类别id
         """
         # 如果track_id不在映射中，则说明是新对象
